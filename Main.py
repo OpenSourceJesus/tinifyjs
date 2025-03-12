@@ -17,7 +17,7 @@ for arg in sys.argv:
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
 for i, char in enumerate(text):
-	if IsInString(text, i) or char not in '\t\n':
+	if IsInString(text, i) or (char not in '\t\n' and (i == 0 or (i > 0 and (char != ' ' or text[i - 1] != ' ')))):
 		output += char
 if outputPath:
 	open(outputPath, 'w').write(output)
