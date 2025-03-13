@@ -5,14 +5,13 @@ TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
 REMAP_CODE = '''m={}
-for(o of [Element,Node,String]){for(n of Object.getOwnPropertyNames(o.prototype)){s=0
+for(o of [Element,Node,String,Array,Document]){for(n of Object.getOwnPropertyNames(o.prototype)){s=0
 e=n.length-1
-a=n[s]+n[e]
+a=n[s]
 while(a in m){s++
-e--
-a=n[s]+n[e]}try{o.prototype[a]=o.prototype[n]
-m[a]=1
-console.log(n,a)}catch(e){}}}'''
+a=n[s]+n[e]
+e--}try{o.prototype[a]=o.prototype[n]
+m[a]=1}catch(e){}}}'''
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
 text = ''
 output = ''
