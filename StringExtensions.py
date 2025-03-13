@@ -21,6 +21,9 @@ def IndicesOfEnclosingChars (string : str, encloser : str, charIndex : int):
 
 # I doubt this method works in all situations
 def IndicesOfEnclosingStringQuotes (string : str, charIndex : int):
+	enclosingBacktickIndices = IndicesOfEnclosingChars(string, '`', charIndex)
+	if enclosingBacktickIndices:
+		return enclosingBacktickIndices
 	enclosingSingleQuoteIndices = IndicesOfEnclosingChars(string, "'", charIndex)
 	enclosingDoubleQuoteIndices = IndicesOfEnclosingChars(string, '"', charIndex)
 	if enclosingSingleQuoteIndices:

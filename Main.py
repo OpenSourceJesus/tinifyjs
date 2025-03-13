@@ -1,4 +1,4 @@
-import sys, os
+import os, sys, string
 from StringExtensions import *
 
 TEXT_INDICATOR = '-t='
@@ -25,10 +25,20 @@ for arg in sys.argv:
 	elif arg.startswith(OUTPUT_INDICATOR):
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
+unusedNames = list(string.ascii_letters)
+unusedNames.remove('m')
+mangledMembers = {}
+currentClause = ''
+prevClause = ''
 indicesOfEnclosingString = None
 for i, char in enumerate(text):
 	if not indicesOfEnclosingString:
 		indicesOfEnclosingString = IndicesOfEnclosingStringQuotes(text, i)
+	if char in "'" + '"` +-*/':
+		prevClause = currentClause
+		currentClause = ''
+	elif not indicesOfEnclosingString:
+		currentClause += char
 	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in '\t\n' and (i == 0 or (i > 0 and (char != ' ' or text[i - 1] != ' ')))):
 		output += char
 remappedOutput = output
