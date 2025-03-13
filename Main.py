@@ -27,6 +27,7 @@ for arg in sys.argv:
 
 unusedNames = list(string.ascii_letters)
 unusedNames.remove('m')
+lastUnusedNameValue = 128
 mangledMembers = {}
 currentClause = ''
 prevClause = ''
@@ -34,12 +35,23 @@ indicesOfEnclosingString = None
 for i, char in enumerate(text):
 	if not indicesOfEnclosingString:
 		indicesOfEnclosingString = IndicesOfEnclosingStringQuotes(text, i)
-	if char in "'" + '"` +-*/':
+	if char in string.punctuation.replace('_', '').replace('$', '') + string.whitespace:
+		if currentClause in mangledMembers:
+			output = output[: -len(currentClause)] + mangledMembers[currentClause] + output[-len(currentClause) :]
+		for char2 in string.whitespace:
+			prevClause = prevClause.replace(char2, '')
+		if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers:
+			if len(unusedNames) == 0:
+				unusedNames.append(chr(lastUnusedNameValue))
+				lastUnusedNameValue += 1
+			print(prevClause, currentClause)
+			mangledMembers[currentClause] = unusedNames.pop()
+			output = output[: -len(currentClause)] + mangledMembers[currentClause]
 		prevClause = currentClause
 		currentClause = ''
-	elif not indicesOfEnclosingString:
+	elif char in string.whitespace or not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
 		currentClause += char
-	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in '\t\n' and (i == 0 or (i > 0 and (char != ' ' or text[i - 1] != ' ')))):
+	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and (i == 0 or (char not in string.whitespace or text[i - 1] not in string.whitespace))) or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']):
 		output += char
 remappedOutput = output
 memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
