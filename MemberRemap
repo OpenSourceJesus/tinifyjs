@@ -44,7 +44,6 @@ getAnimations tn
 before b
 after fr
 replaceWith eh
-prepend p
 replaceChildren pe
 querySelector q
 querySelectorAll ul
@@ -52,7 +51,6 @@ getRootNode Ro
 hasChildNodes se
 insertBefore sr
 appendChild pl
-append pd
 replaceChild ed
 removeChild ml
 remove mv
@@ -89,7 +87,6 @@ toUpperCase Us
 charAt ht
 charCodeAt aA
 codePointAt ot
-at tt
 substring ug
 padStart at
 padEnd ad
@@ -108,7 +105,6 @@ search ac
 replaceAll el
 split pt
 substr ur
-slice ic
 bold od
 italics ts
 fixed f
@@ -122,7 +118,7 @@ anchor nr
 link ik
 fontcolor tl
 fontsize nz
-trimLeft if
+trimLeft tL
 trimRight ih
 trim rm
 isWellFormed sd
@@ -136,7 +132,6 @@ pop op
 shift fi
 unshift u
 splice lc
-slice ci
 forEach oh
 map ap
 filter ir
@@ -144,7 +139,6 @@ reduce dc
 reduceRight dh
 some mm
 every vy
-find id
 findIndex ix
 copyWithin pi
 fill il
@@ -153,8 +147,9 @@ keys k
 values uu
 flatMap lp
 flat lt
-findLast it
 findLastIndex dd
+findLast it
+find id
 toReversed Re
 toSorted Se
 toSpliced li
@@ -203,8 +198,6 @@ elementFromPoint mi
 elementsFromPoint nP
 getAnimations ni
 getElementById tI
-prepend ep
-append pn
 replaceChildren Ch
 replace pc
 querySelector yc

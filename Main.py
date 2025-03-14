@@ -14,6 +14,7 @@ e--}try{o.prototype[a]=o.prototype[n]
 m[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
 OKAY_NAME_CHARS.remove('m')
+WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
 memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
@@ -42,7 +43,7 @@ for i, char in enumerate(text):
 	if not indicesOfEnclosingString:
 		indicesOfEnclosingString = IndicesOfEnclosingStringQuotes(text, i)
 	if not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
-		endClauseChars = string.punctuation.replace('_', '').replace('$', '') + string.whitespace
+		endClauseChars = string.punctuation.replace('_', '').replace('$', '') + WHITESPACE_EQUIVALENT
 		for digit in string.digits:
 			if currentClause.startswith(digit):
 				endClauseChars += string.digits
@@ -53,7 +54,7 @@ for i, char in enumerate(text):
 			if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers:
 				while len(unusedNames) == 0:
 					unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-					if unusedName not in mangledMembers:
+					if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in ['if', 'do']:
 						unusedNames.append(unusedName)
 				mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
 				output = output[: -len(currentClause)] + mangledMembers[currentClause]
@@ -61,7 +62,7 @@ for i, char in enumerate(text):
 			currentClause = ''
 		else:
 			currentClause += char
-	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and i == 0) or (char in string.whitespace + ';' and text[i - 1] not in string.whitespace + ';') or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in WHITESPACE_EQUIVALENT and i == 0) or (char in WHITESPACE_EQUIVALENT and text[i - 1] not in WHITESPACE_EQUIVALENT) or (char in WHITESPACE_EQUIVALENT and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
 		output += char
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
