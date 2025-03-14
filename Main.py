@@ -59,9 +59,9 @@ for i, char in enumerate(text):
 				output = output[: -len(currentClause)] + mangledMembers[currentClause]
 			prevClause = currentClause
 			currentClause = ''
-		elif char in string.whitespace or not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
+		else:
 			currentClause += char
-	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and i == 0) or (char in string.whitespace and text[i - 1] not in string.whitespace) or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and i == 0) or (char in string.whitespace + ';' and text[i - 1] not in string.whitespace + ';') or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
 		output += char
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
