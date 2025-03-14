@@ -1,4 +1,4 @@
-import os, sys, string, random
+import os, sys, string, base64, random, subprocess
 from StringExtensions import *
 
 TEXT_INDICATOR = '-t='
@@ -24,7 +24,7 @@ for line in memberRemap.split('\n'):
 	MEMBER_REMAP[clauses[0]] = clauses[1]
 text = ''
 output = ''
-outputPath = None
+outputPath = '/tmp/tinifyjs Output.js'
 unusedNames = []
 unusedNames.extend(OKAY_NAME_CHARS)
 mangledMembers = {}
@@ -42,7 +42,7 @@ for arg in sys.argv:
 
 for i, char in enumerate(text):
 	if not indicesOfEnclosingStringStartEnd:
-		indicesOfEnclosingStringStartEnd = indicesOfEnclosingStringStartEndStartEnd(text, i)
+		indicesOfEnclosingStringStartEnd = IndicesOfEnclosingStringStartEnd(text, i)
 	if not indicesOfEnclosingStringStartEnd or i > indicesOfEnclosingStringStartEnd[1]:
 		endClauseChars = string.punctuation.replace('_', '').replace('$', '') + WHITESPACE_EQUIVALENT
 		for digit in string.digits:
@@ -60,7 +60,7 @@ for i, char in enumerate(text):
 				mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
 				output = output[: -len(currentClause)] + mangledMembers[currentClause]
 			elif prevClause == 'for':
-				
+				pass
 			prevClause = currentClause
 			currentClause = ''
 		else:
@@ -74,7 +74,23 @@ for key, value in MEMBER_REMAP.items():
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
-if outputPath:
-	open(outputPath, 'w').write(output)
-else:
-	print(output)
+open(outputPath, 'w').write(output)
+cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
+subprocess.check_call(cmd)
+jsZipped = open(outputPath + '.gz', 'rb').read()
+jsBytes = base64.b64encode(jsZipped).decode('utf-8')
+outputWithDecompression = '''c="%s"
+u=async(u,t)=>{d=new DecompressionStream('gzip')
+r=await fetch('data:application/octet-stream;base64,'+u)
+b=await r.blob()
+s=b.stream().pipeThrough(d)
+o=await new Response(s).blob()
+return await o.text()}
+u(c,1).then((j)=>{
+eval(j)})''' %jsBytes
+if len(output) > len(outputWithDecompression):
+	output = outputWithDecompression
+open(outputPath, 'w').write(output)
+cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
+subprocess.check_call(cmd)
+print(output)
