@@ -15,7 +15,6 @@ e--}try{p[a]=p[n]
 m[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
 OKAY_NAME_CHARS.remove('m')
-OKAY_NAME_CHARS.remove('o')
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
@@ -67,15 +66,21 @@ for i, char in enumerate(text):
 			elif prevWord == 'for':
 				prevWordIndex = text.rfind(prevWord, i)
 				leftParenthesisIndex = text.find('(', prevWordIndex)
-				rightParenthesisIndex = IndexOfMatchingRightChar(text, '(', ')', leftParenthesisIndex)
-				forClause = text[prevWordIndex : rightParenthesisIndex + 1]
-				if ' of ' in forClause:
+				betweenForAndLeftParenthesis = text[prevWordIndex + len(prevWord) : leftParenthesisIndex]
+				print(betweenForAndLeftParenthesis)
+				if len(betweenForAndLeftParenthesis) == 0 or betweenForAndLeftParenthesis.isspace():
+					rightParenthesisIndex = IndexOfMatchingRightChar(text, '(', ')', leftParenthesisIndex)
+					forClause = text[prevWordIndex : rightParenthesisIndex + 1]
 					print('YAY', forClause)
+					if ' of ' in forClause:
+						pass
 			prevWord = currentWord
 			currentWord = ''
 		else:
 			currentWord += char
-	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char in WHITESPACE_EQUIVALENT + string.punctuation and (text[i - 1] not in WHITESPACE_EQUIVALENT + string.punctuation or prevWord in ['return', 'let', 'var', 'function', 'if', 'else', 'of', 'in', 'while'])) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char in WHITESPACE_EQUIVALENT + string.punctuation and (text[i - 1] not in WHITESPACE_EQUIVALENT + string.punctuation or prevWord in ['return', 'let', 'var', 'function', 'else', 'while', 'if', 'do', 'of', 'in'])) or char in string.ascii_letters + string.digits + string.punctuation:
+		if char in string.punctuation and text[i - 1] in WHITESPACE_EQUIVALENT:
+			output = output[: -1]
 		output += char
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
@@ -95,8 +100,7 @@ r=await fetch('data:application/octet-stream;base64,'+u)
 b=await r.blob()
 s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
-return await o.text()}
-u("%s",1).then((j)=>{eval(j)})''' %jsBytes
+return await o.text()}u("%s",1).then((j)=>{eval(j)})''' %jsBytes
 if len(output) > len(outputWithDecompression):
 	output = outputWithDecompression
 open(outputPath, 'w').write(output)
