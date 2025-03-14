@@ -1,4 +1,4 @@
-import os, sys, string
+import os, sys, string, random
 from StringExtensions import *
 
 TEXT_INDICATOR = '-t='
@@ -12,10 +12,23 @@ while(a in m){s++
 a=n[s]+n[e]
 e--}try{o.prototype[a]=o.prototype[n]
 m[a]=1}catch(e){}}}'''
+OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
+OKAY_NAME_CHARS.remove('m')
+MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
+memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
+for line in memberRemap.split('\n'):
+	clauses = line.split()
+	MEMBER_REMAP[clauses[0]] = clauses[1]
 text = ''
 output = ''
 outputPath = None
+unusedNames = []
+unusedNames.extend(OKAY_NAME_CHARS)
+mangledMembers = {}
+currentClause = ''
+prevClause = ''
+indicesOfEnclosingString = None
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDICATOR):
@@ -25,40 +38,35 @@ for arg in sys.argv:
 	elif arg.startswith(OUTPUT_INDICATOR):
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
-unusedNames = list(string.ascii_letters)
-unusedNames.remove('m')
-lastUnusedNameValue = 128
-mangledMembers = {}
-currentClause = ''
-prevClause = ''
-indicesOfEnclosingString = None
 for i, char in enumerate(text):
 	if not indicesOfEnclosingString:
 		indicesOfEnclosingString = IndicesOfEnclosingStringQuotes(text, i)
-	if char in string.punctuation.replace('_', '').replace('$', '') + string.whitespace:
-		if currentClause in mangledMembers:
-			output = output[: -len(currentClause)] + mangledMembers[currentClause] + output[-len(currentClause) :]
-		for char2 in string.whitespace:
-			prevClause = prevClause.replace(char2, '')
-		if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers:
-			if len(unusedNames) == 0:
-				unusedNames.append(chr(lastUnusedNameValue))
-				lastUnusedNameValue += 1
-			print(prevClause, currentClause)
-			mangledMembers[currentClause] = unusedNames.pop()
-			output = output[: -len(currentClause)] + mangledMembers[currentClause]
-		prevClause = currentClause
-		currentClause = ''
-	elif char in string.whitespace or not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
-		currentClause += char
-	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and (i == 0 or (char not in string.whitespace or text[i - 1] not in string.whitespace))) or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']):
+	if not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
+		endClauseChars = string.punctuation.replace('_', '').replace('$', '') + string.whitespace
+		for digit in string.digits:
+			if currentClause.startswith(digit):
+				endClauseChars += string.digits
+				break
+		if char in endClauseChars:
+			if currentClause in mangledMembers:
+				output = output[: -len(currentClause)] + mangledMembers[currentClause]
+			if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers:
+				while len(unusedNames) == 0:
+					unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+					if unusedName not in mangledMembers:
+						unusedNames.append(unusedName)
+				mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
+				output = output[: -len(currentClause)] + mangledMembers[currentClause]
+			prevClause = currentClause
+			currentClause = ''
+		elif char in string.whitespace or not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
+			currentClause += char
+	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in string.whitespace and i == 0) or (char in string.whitespace and text[i - 1] not in string.whitespace) or (char in string.whitespace and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
 		output += char
 remappedOutput = output
-memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
-for line in memberRemap.split('\n'):
-	clauses = line.split()
-	remappedOutput = remappedOutput.replace('.' + clauses[0], '.' + clauses[1])
-	remappedOutput = remappedOutput.replace('[' + clauses[0] + ']', '[' + clauses[1] + ']')
+for key, value in MEMBER_REMAP.items():
+	remappedOutput = remappedOutput.replace('.' + key, '.' + value)
+	remappedOutput = remappedOutput.replace('[' + key + ']', '[' + value + ']')
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
