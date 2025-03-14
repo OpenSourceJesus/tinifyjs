@@ -63,25 +63,28 @@ for i, char in enumerate(text):
 					output = output[: -len(currentWord)] + mangledMembers[currentWord]
 				else:
 					usedNames.append(currentWord)
-			elif prevWord == 'for':
-				prevWordIndex = text.rfind(prevWord, i)
-				leftParenthesisIndex = text.find('(', prevWordIndex)
-				betweenForAndLeftParenthesis = text[prevWordIndex + len(prevWord) : leftParenthesisIndex]
-				print(betweenForAndLeftParenthesis)
-				if len(betweenForAndLeftParenthesis) == 0 or betweenForAndLeftParenthesis.isspace():
-					rightParenthesisIndex = IndexOfMatchingRightChar(text, '(', ')', leftParenthesisIndex)
-					forClause = text[prevWordIndex : rightParenthesisIndex + 1]
-					print('YAY', forClause)
-					if ' of ' in forClause:
-						pass
 			prevWord = currentWord
 			currentWord = ''
 		else:
 			currentWord += char
-	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char in WHITESPACE_EQUIVALENT + string.punctuation and (text[i - 1] not in WHITESPACE_EQUIVALENT + string.punctuation or prevWord in ['return', 'let', 'var', 'function', 'else', 'while', 'if', 'do', 'of', 'in'])) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char in WHITESPACE_EQUIVALENT + string.punctuation and (text[i - 1] not in WHITESPACE_EQUIVALENT + string.punctuation or prevWord in ['return', 'while', 'else', 'for', 'let', 'var', 'function', 'if', 'do', 'of', 'in'])) or char in string.ascii_letters + string.digits + string.punctuation:
 		if char in string.punctuation and text[i - 1] in WHITESPACE_EQUIVALENT:
 			output = output[: -1]
 		output += char
+forIndex = -1
+while True:
+	forIndex = output.find('for', forIndex + 1)
+	if forIndex == -1:
+		break
+	if not IndicesOfEnclosingStringStartEnd(output, forIndex):
+		leftParenthesisIndex = output.find('(', forIndex)
+		betweenForAndParenthesis = output[forIndex + 3 : leftParenthesisIndex]
+		if len(betweenForAndParenthesis) == 0 or betweenForAndParenthesis.isspace():
+			rightParenthesisIndex = IndexOfMatchingRightChar(output, '(', ')', leftParenthesisIndex)
+			forClause = output[forIndex : rightParenthesisIndex + 1]
+			if ' of ' in forClause:
+				clauses = forClause.split(' of ')
+				output = output[: forIndex] + '@' + clauses[0] + '~' + clauses[1] + '#' + output[rightParenthesisIndex + 2 :]
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
 	remappedOutput = remappedOutput.replace('.' + key, '.' + value)
@@ -100,7 +103,14 @@ r=await fetch('data:application/octet-stream;base64,'+u)
 b=await r.blob()
 s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
-return await o.text()}u("%s",1).then((j)=>{eval(j)})''' %jsBytes
+return await o.text()}
+u("%s",1).then((j)=>{s=-1
+while(True){s=j.find('@',s+1)
+if(s<0)break
+m=j.find('~',s)
+e=j.find('#',m)
+j=j.replace(j.slice(s,e),'for('+j.slice(s,m)+' of '+s.slice(m+1,e)+')')}
+eval(j)})''' %jsBytes
 if len(output) > len(outputWithDecompression):
 	output = outputWithDecompression
 open(outputPath, 'w').write(output)
