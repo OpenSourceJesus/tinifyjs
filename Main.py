@@ -5,12 +5,13 @@ TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
 REMAP_CODE = '''m={}
-for(o of [Element,Node,String,Array,Document]){for(n of Object.getOwnPropertyNames(o.prototype)){s=0
+for(o of [Element,Node,String,Array,Document]){p=o.prototype
+for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
 while(a in m){s++
 a=n[s]+n[e]
-e--}try{o.prototype[a]=o.prototype[n]
+e--}try{p[a]=p[n]
 m[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
 OKAY_NAME_CHARS.remove('m')
@@ -29,7 +30,7 @@ unusedNames.extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 currentClause = ''
 prevClause = ''
-indicesOfEnclosingString = None
+indicesOfEnclosingStringStartEnd = None
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDICATOR):
@@ -40,9 +41,9 @@ for arg in sys.argv:
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
 for i, char in enumerate(text):
-	if not indicesOfEnclosingString:
-		indicesOfEnclosingString = IndicesOfEnclosingStringQuotes(text, i)
-	if not indicesOfEnclosingString or i > indicesOfEnclosingString[1]:
+	if not indicesOfEnclosingStringStartEnd:
+		indicesOfEnclosingStringStartEnd = indicesOfEnclosingStringStartEndStartEnd(text, i)
+	if not indicesOfEnclosingStringStartEnd or i > indicesOfEnclosingStringStartEnd[1]:
 		endClauseChars = string.punctuation.replace('_', '').replace('$', '') + WHITESPACE_EQUIVALENT
 		for digit in string.digits:
 			if currentClause.startswith(digit):
@@ -58,11 +59,13 @@ for i, char in enumerate(text):
 						unusedNames.append(unusedName)
 				mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
 				output = output[: -len(currentClause)] + mangledMembers[currentClause]
+			elif prevClause == 'for':
+				
 			prevClause = currentClause
 			currentClause = ''
 		else:
 			currentClause += char
-	if (indicesOfEnclosingString and i < indicesOfEnclosingString[1]) or (char not in WHITESPACE_EQUIVALENT and i == 0) or (char in WHITESPACE_EQUIVALENT and text[i - 1] not in WHITESPACE_EQUIVALENT) or (char in WHITESPACE_EQUIVALENT and prevClause in ['return', 'let', 'var', 'function', 'else', 'of']) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char not in WHITESPACE_EQUIVALENT and i == 0) or (char in WHITESPACE_EQUIVALENT and (text[i - 1] not in WHITESPACE_EQUIVALENT or prevClause in ['return', 'let', 'var', 'function', 'else', 'of'])) or char in string.ascii_letters + string.digits + string.punctuation:
 		output += char
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
