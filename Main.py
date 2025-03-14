@@ -28,6 +28,7 @@ outputPath = '/tmp/tinifyjs Output.js'
 unusedNames = []
 unusedNames.extend(OKAY_NAME_CHARS)
 mangledMembers = {}
+usedNames = []
 currentClause = ''
 prevClause = ''
 indicesOfEnclosingStringStartEnd = None
@@ -52,20 +53,23 @@ for i, char in enumerate(text):
 		if char in endClauseChars:
 			if currentClause in mangledMembers:
 				output = output[: -len(currentClause)] + mangledMembers[currentClause]
-			if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers:
-				while len(unusedNames) == 0:
-					unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-					if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in ['if', 'do']:
-						unusedNames.append(unusedName)
-				mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
-				output = output[: -len(currentClause)] + mangledMembers[currentClause]
+			if prevClause in ['let', 'var', 'function'] and currentClause not in mangledMembers and currentClause not in usedNames:
+				if len(currentClause) > 1:
+					while len(unusedNames) == 0:
+						unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+						if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames and unusedName not in ['if', 'do']:
+							unusedNames.append(unusedName)
+					mangledMembers[currentClause] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
+					output = output[: -len(currentClause)] + mangledMembers[currentClause]
+				else:
+					usedNames.append(currentClause)
 			elif prevClause == 'for':
 				pass
 			prevClause = currentClause
 			currentClause = ''
 		else:
 			currentClause += char
-	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char not in WHITESPACE_EQUIVALENT and i == 0) or (char in WHITESPACE_EQUIVALENT and (text[i - 1] not in WHITESPACE_EQUIVALENT or prevClause in ['return', 'let', 'var', 'function', 'else', 'of'])) or char in string.ascii_letters + string.digits + string.punctuation:
+	if (indicesOfEnclosingStringStartEnd and i < indicesOfEnclosingStringStartEnd[1]) or (char in WHITESPACE_EQUIVALENT and ((text[i - 1] not in WHITESPACE_EQUIVALENT + string.punctuation) or prevClause in ['return', 'let', 'var', 'function', 'else', 'of'])) or char in string.ascii_letters + string.digits + string.punctuation:
 		output += char
 remappedOutput = output
 for key, value in MEMBER_REMAP.items():
@@ -75,22 +79,21 @@ remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
 open(outputPath, 'w').write(output)
+print(output)
 cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
 subprocess.check_call(cmd)
 jsZipped = open(outputPath + '.gz', 'rb').read()
 jsBytes = base64.b64encode(jsZipped).decode('utf-8')
-outputWithDecompression = '''c="%s"
-u=async(u,t)=>{d=new DecompressionStream('gzip')
+outputWithDecompression = '''u=async(u,t)=>{d=new DecompressionStream('gzip')
 r=await fetch('data:application/octet-stream;base64,'+u)
 b=await r.blob()
 s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
 return await o.text()}
-u(c,1).then((j)=>{
+u("%s",1).then((j)=>{
 eval(j)})''' %jsBytes
 if len(output) > len(outputWithDecompression):
 	output = outputWithDecompression
 open(outputPath, 'w').write(output)
 cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
 subprocess.check_call(cmd)
-print(output)
