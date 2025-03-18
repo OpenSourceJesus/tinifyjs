@@ -26,6 +26,7 @@ for line in memberRemap.split('\n'):
 	MEMBER_REMAP[parts[0]] = parts[1]
 text = ''
 output = ''
+remappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
 unusedNames = []
 unusedNames.extend(OKAY_NAME_CHARS)
@@ -34,8 +35,8 @@ usedNames = []
 
 def WalkTree (node):
 	global output, remappedOutput
-	print(node.type, node.text)
 	nodeText = node.text.decode('utf-8')
+	print(node.type, nodeText)
 	remappedNodeText = nodeText
 	if len(node.children) == 0:
 		if node.type == 'identifier':
@@ -46,6 +47,8 @@ def WalkTree (node):
 						if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames and unusedName not in ['if', 'do', 'of', 'in']:
 							unusedNames.append(unusedName)
 					mangledMembers[nodeText] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
+					if mangledMembers[nodeText] not in usedNames:
+						usedNames.append(mangledMembers[nodeText])
 				if nodeText in mangledMembers:
 					nodeText = mangledMembers[nodeText]
 					remappedNodeText = nodeText
@@ -57,15 +60,17 @@ def WalkTree (node):
 		if isOfNode:
 			AddToOutputs (' ')
 		output += nodeText
-		remappedNodeText += remappedNodeText
-		if isOfNode:
+		remappedOutput += remappedNodeText
+		if isOfNode or node.type in ['return', 'class', 'function']:
 			siblingIdx = node.parent.children.index(node)
-			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type == 'identifier':
+			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression']:
 				AddToOutputs (' ')
 		elif node.type == 'else':
 			siblingIdx = node.parent.children.index(node)
-			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type == 'if_statement':
+			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['if_statement', 'lexical_declaration', 'variable_declaration']:
 				AddToOutputs (' ')
+		elif node.type == 'new':
+			AddToOutputs (' ')
 	for n in node.children:
 		WalkTree (n)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeText.endswith(';'):
@@ -94,13 +99,11 @@ for arg in sys.argv:
 
 jsBytes = bytes(text, 'utf8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
-output = ''
-remappedOutput = ''
 WalkTree (tree.root_node)
-print(output)
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
+print(output)
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
 outputWithDecompression = '''u=async(u,t)=>{d=new DecompressionStream('gzip')
