@@ -10,7 +10,7 @@ def Compress (filePath : str, resultId : str):
 
 inputPath = '/tmp/tinifyjs Benchmark Input.js'
 open(inputPath, 'w').write(text)
-results['tinifyjs'] = len(open(outputPath, 'r').read())
+results['tinifyjs'] = len(open(outputPath + '.gz', 'rb').read())
 outputPathPrefix = '/tmp/tinifyjs Benchmark Output'
 js = subprocess.run(['uglifyjs', inputPath, '-m'], capture_output = True).stdout
 outputPath = outputPathPrefix + '_uglifyjs.js'

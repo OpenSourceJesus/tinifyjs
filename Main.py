@@ -122,8 +122,8 @@ s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
 return await o.text()}
 u("%s",1).then((j)=>{eval(j)})''' %jsBytes
-# if len(output) > len(outputWithDecompression):
-# 	output = outputWithDecompression
+if len(output) > len(outputWithDecompression):
+	output = outputWithDecompression
 print(output)
 open(outputPath, 'w').write(output)
 Compress (outputPath)
