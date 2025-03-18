@@ -34,36 +34,28 @@ mangledMembers = {}
 usedNames = []
 
 def WalkTree (node):
-	global output, remappedOutput
+	global output, nodeText, remappedOutput, remappedNodeText
 	nodeText = node.text.decode('utf-8')
 	print(node.type, nodeText)
 	remappedNodeText = nodeText
 	if len(node.children) == 0:
+		isOf = node.type == 'of'
 		if node.type == 'identifier':
-			if len(nodeText) > 1:
-				if nodeText not in mangledMembers and node.parent.parent.type in ['lexical_declaration', 'variable_declaration']:
-					while len(unusedNames) == 0:
-						unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-						if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames and unusedName not in ['if', 'do', 'of', 'in']:
-							unusedNames.append(unusedName)
-					mangledMembers[nodeText] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
-					if mangledMembers[nodeText] not in usedNames:
-						usedNames.append(mangledMembers[nodeText])
-				if nodeText in mangledMembers:
-					nodeText = mangledMembers[nodeText]
-					remappedNodeText = nodeText
-			elif nodeText not in usedNames:
-				usedNames.append(nodeText)
-		elif node.type == 'property_identifier' and nodeText in MEMBER_REMAP:
-			remappedNodeText = MEMBER_REMAP[nodeText]
-		isOfNode = node.type == 'of'
-		if isOfNode:
+			TryMangleNode (node)
+		elif node.type == 'property_identifier':
+			if nodeText in MEMBER_REMAP:
+				remappedNodeText = MEMBER_REMAP[nodeText]
+			else:
+				siblingIdx = node.parent.children.index(node)
+				if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
+					TryMangleNode (node)
+		elif isOf:
 			AddToOutputs (' ')
 		output += nodeText
 		remappedOutput += remappedNodeText
-		if isOfNode or node.type in ['return', 'class', 'function']:
+		if isOf or node.type in ['return', 'class', 'function']:
 			siblingIdx = node.parent.children.index(node)
-			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression']:
+			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']:
 				AddToOutputs (' ')
 		elif node.type == 'else':
 			siblingIdx = node.parent.children.index(node)
@@ -82,6 +74,23 @@ def AddToOutputs (add : str):
 	global output, remappedOutput
 	output += add
 	remappedOutput += add
+
+def TryMangleNode (node):
+	global nodeText, remappedNodeText
+	if len(nodeText) > 1:
+		if nodeText not in mangledMembers:
+			while len(unusedNames) == 0:
+				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames and unusedName not in ['if', 'do', 'of', 'in']:
+					unusedNames.append(unusedName)
+			mangledMembers[nodeText] = unusedNames.pop(random.randint(0, len(unusedNames) - 1))
+			if mangledMembers[nodeText] not in usedNames:
+				usedNames.append(mangledMembers[nodeText])
+		if nodeText in mangledMembers:
+			nodeText = mangledMembers[nodeText]
+			remappedNodeText = nodeText
+	elif nodeText not in usedNames:
+		usedNames.append(nodeText)
 
 def Compress (filePath : str):
 	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
@@ -113,8 +122,8 @@ s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
 return await o.text()}
 u("%s",1).then((j)=>{eval(j)})''' %jsBytes
-if len(output) > len(outputWithDecompression):
-	output = outputWithDecompression
+# if len(output) > len(outputWithDecompression):
+# 	output = outputWithDecompression
 print(output)
 open(outputPath, 'w').write(output)
 Compress (outputPath)
