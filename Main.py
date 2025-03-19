@@ -17,6 +17,7 @@ e--}try{p[a]=p[n]
 m[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
 OKAY_NAME_CHARS.remove('m')
+JS_NAMES = ['Math', 'document']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
@@ -44,7 +45,7 @@ def WalkTree (node):
 	remappedNodeText = nodeText
 	if len(node.children) == 0:
 		siblingIdx = node.parent.children.index(node)
-		if node.type == 'identifier' and siblingIdx > 0 and node.parent.children[siblingIdx - 1].type == 'function':
+		if (node.type == 'identifier' and siblingIdx > 0 and node.parent.children[siblingIdx - 1].type == 'function') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeText
 			currentFunc = node
 			unusedNames[currentFuncName] = []
@@ -62,12 +63,12 @@ def WalkTree (node):
 			remappedNodeText = 'var'
 		output += nodeText
 		remappedOutput += remappedNodeText
-		if isOfOrIn or node.type in ['return', 'class', 'function']:
-			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']:
-				AddToOutputs (' ')
-		elif node.type == 'else':
-			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['if_statement', 'lexical_declaration', 'variable_declaration']:
-				AddToOutputs (' ')
+		hasNextSibling = len(node.parent.children) > siblingIdx + 1
+		nextSiblingType = None
+		if hasNextSibling:
+			nextSiblingType = node.parent.children[siblingIdx + 1].type
+		if hasNextSibling and (((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration'])):
+			AddToOutputs (' ')
 		elif node.type == 'new':
 			AddToOutputs (' ')
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
@@ -92,6 +93,8 @@ def TryMangleOrRemapNode (node) -> (str, bool):
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
 			return (MEMBER_REMAP[nodeText], False)
+		elif node.parent.type == 'method_definition':
+			return (TryMangleNode(node), True)
 		else:
 			siblingIdx = node.parent.children.index(node)
 			if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
@@ -100,12 +103,12 @@ def TryMangleOrRemapNode (node) -> (str, bool):
 
 def TryMangleNode (node) -> str:
 	nodeText = node.text.decode('utf-8')
-	usedNames_ = []
-	usedNames_.extend(usedNames[currentFuncName])
+	if nodeText in JS_NAMES:
+		return nodeText
+	usedNames_ = usedNames[currentFuncName]
 	if len(nodeText) > 1:
 		if nodeText not in mangledMembers:
-			unusedNames_ = []
-			unusedNames_.extend(unusedNames[currentFuncName])
+			unusedNames_ = unusedNames[currentFuncName]
 			while len(unusedNames_) == 0:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
 				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in']:
@@ -152,7 +155,6 @@ if len(output) > len(remappedOutput):
 print(output)
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
-print('YAY', type(jsBytes))
 base64EncodedJsBytes = base64.b64encode(jsBytes).decode('utf-8')
 outputWithDecompression = '''u=async(u,t)=>{d=new DecompressionStream('gzip')
 r=await fetch('data:application/octet-stream;base64,'+u)
