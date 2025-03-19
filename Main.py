@@ -7,7 +7,7 @@ TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
 REMAP_CODE = '''m={}
-for(o of [Element,Node,String,Array,Document]){p=o.prototype
+for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
@@ -17,12 +17,12 @@ e--}try{p[a]=p[n]
 m[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
 OKAY_NAME_CHARS.remove('m')
-JS_NAMES = ['Math', 'document']
+JS_NAMES = ['Math', 'document', 'style', 'window']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
-memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
-for line in memberRemap.split('\n'):
+_memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
+for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
 text = ''
@@ -50,7 +50,7 @@ def WalkTree (node):
 		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
-		if nodeText in ['let', 'var']:
+		elif nodeText in ['let', 'var']:
 			nodeText = 'var '
 			remappedNodeText = 'var '
 		output += nodeText
@@ -58,7 +58,7 @@ def WalkTree (node):
 		siblingIdx = node.parent.children.index(node)
 		if len(node.parent.children) > siblingIdx + 1:
 			nextSiblingType = node.parent.children[siblingIdx + 1].type
-			if node.type == 'new' or ((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement', 'return', 'while']):
+			if node.type in ['new', 'delete'] or ((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement', 'return', 'while']):
 				AddToOutputs (' ')
 		elif currentFunc and AtEndOfHierarchy(currentFunc, node):
 			currentFuncName = ''
