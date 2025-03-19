@@ -1,4 +1,4 @@
-import os, sys, string, base64, random, subprocess, tree_sitter_javascript as tsjs
+import os, sys, string, random, subprocess, tree_sitter_javascript as tsjs
 from tree_sitter import Language, Parser
 
 JS_LANG = Language(tsjs.language())
@@ -6,18 +6,18 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-REMAP_CODE = '''mr={}
-F='function'
+REMAP_CODE = '''ms={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-while(a in mr){s++
+while(a in ms){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
-mr[a]=1}catch(e){}}}eval(`'''
+ms[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 OKAY_NAME_CHARS.remove('F')
+OKAY_NAME_CHARS.remove('M')
 JS_NAMES = ['Math', 'document', 'style', 'window']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
@@ -34,13 +34,14 @@ currentFuncName = ''
 currentFunc = None
 unusedNames = {}
 unusedNames[currentFuncName] = []
-unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
+unusedNames[currentFuncName].extend(OKAY_NAME_CHARS + ['F', 'M'])
 mangledMembers = {}
+mangledMembers[currentFuncName] = {}
 usedNames = {}
 usedNames[currentFuncName] = []
 
 def WalkTree (node):
-	global output, nodeText, currentFunc, currentFuncName, remappedOutput
+	global output, nodeText, currentFunc, mangledMembers, currentFuncName, remappedOutput
 	nodeText = node.text.decode('utf-8')
 	print(node.type, nodeText)
 	if node.children == []:
@@ -51,10 +52,10 @@ def WalkTree (node):
 		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
-		elif nodeText in ['let', 'var']:
+		elif node.type in ['let', 'var', 'const']:
 			nodeText = 'var '
-			remappedNodeText = 'var '
-		elif nodeText == 'function':
+			remappedNodeText = nodeText
+		elif node.type == 'function':
 			nodeText = '${F}'
 			remappedNodeText = nodeText
 		output += nodeText
@@ -72,7 +73,11 @@ def WalkTree (node):
 			currentFunc = node.parent
 			unusedNames[nodeText] = []
 			unusedNames[nodeText].extend(OKAY_NAME_CHARS)
-			usedNames[nodeText] = []
+			for unusedName in unusedNames['']:
+				if unusedName in unusedNames[nodeText]:
+					unusedNames[nodeText].remove(unusedName)
+			usedNames[nodeText] = usedNames['']
+			mangledMembers[currentFuncName] = mangledMembers['']
 	for n in node.children:
 		WalkTree (n)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeText.endswith(';') and node.end_byte < len(text) - 1:
@@ -86,13 +91,15 @@ def AddToOutputs (add : str):
 def TryMangleOrRemapNode (node) -> (str, bool):
 	nodeText = node.text.decode('utf-8')
 	if node.type == 'identifier':
+		if nodeText == 'Math':
+			return ('M', True)
 		return (TryMangleNode(node), True)
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
 			return (MEMBER_REMAP[nodeText], False)
 		else:
 			parentNodeText = node.parent.text.decode('utf-8')
-			if node.parent.type in ['method_definition'] or parentNodeText in usedNames[currentFuncName] or parentNodeText in JS_NAMES:
+			if node.parent.type in ['method_definition'] or parentNodeText not in usedNames[currentFuncName] or parentNodeText not in JS_NAMES:
 				return (TryMangleNode(node), True)
 			else:
 				siblingIdx = node.parent.children.index(node)
@@ -106,17 +113,17 @@ def TryMangleNode (node) -> str:
 		return nodeText
 	usedNames_ = usedNames[currentFuncName]
 	if len(nodeText) > 1:
-		if nodeText not in mangledMembers:
-			unusedNames_ = unusedNames[currentFuncName]
-			while unusedNames_ == []:
+		mangledMembers_ = mangledMembers[currentFuncName]
+		if nodeText not in mangledMembers_:
+			while unusedNames[currentFuncName] == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in', 'mr']:
+				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers_ and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in', 'ms']:
 					unusedNames[currentFuncName].append(unusedName)
-			mangledMembers[nodeText] = unusedNames_.pop(random.randint(0, len(unusedNames_) - 1))
-			if mangledMembers[nodeText] not in usedNames_:
-				usedNames[currentFuncName].append(mangledMembers[nodeText])
-		if nodeText in mangledMembers:
-			nodeText = mangledMembers[nodeText]
+			mangledMembers[currentFuncName][nodeText] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
+			if mangledMembers[currentFuncName][nodeText] not in usedNames_:
+				usedNames[currentFuncName].append(mangledMembers[currentFuncName][nodeText])
+		if nodeText in mangledMembers[currentFuncName]:
+			nodeText = mangledMembers[currentFuncName][nodeText]
 	elif nodeText not in usedNames_:
 		usedNames[currentFuncName].append(nodeText)
 	return nodeText
@@ -149,7 +156,7 @@ WalkTree (tree.root_node)
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
-output += '`)'
+output = 'F="function";M=Math;eval(`' + output + '`)'
 print(output)
 open(outputPath, 'w').write(output)
 Compress(outputPath)
