@@ -50,18 +50,16 @@ def WalkTree (node):
 		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
-		if nodeText == 'let':
-			nodeText = 'var'
-			remappedNodeText = 'var'
+		if nodeText in ['let', 'var']:
+			nodeText = 'var '
+			remappedNodeText = 'var '
 		output += nodeText
 		remappedOutput += remappedNodeText
 		siblingIdx = node.parent.children.index(node)
-		hasNextSibling = len(node.parent.children) > siblingIdx + 1
-		nextSiblingType = None
-		if hasNextSibling:
+		if len(node.parent.children) > siblingIdx + 1:
 			nextSiblingType = node.parent.children[siblingIdx + 1].type
-		if hasNextSibling and (((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration']) or node.type == 'new'):
-			AddToOutputs (' ')
+			if node.type == 'new' or ((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement', 'return', 'while']):
+				AddToOutputs (' ')
 		elif currentFunc and AtEndOfHierarchy(currentFunc, node):
 			currentFuncName = ''
 			currentFunc = None
@@ -75,8 +73,6 @@ def WalkTree (node):
 		WalkTree (n)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeText.endswith(';') and node.end_byte < len(text) - 1:
 		AddToOutputs (';')
-	elif node.type in ['var', 'let']:
-		AddToOutputs (' ')
 
 def AddToOutputs (add : str):
 	global output, remappedOutput
