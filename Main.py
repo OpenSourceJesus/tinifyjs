@@ -40,6 +40,7 @@ def WalkTree (node):
 	remappedNodeText = nodeText
 	if len(node.children) == 0:
 		isOf = node.type == 'of'
+		isIn = node.type == 'in'
 		if node.type == 'identifier':
 			TryMangleNode (node)
 		elif node.type == 'property_identifier':
@@ -49,11 +50,11 @@ def WalkTree (node):
 				siblingIdx = node.parent.children.index(node)
 				if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
 					TryMangleNode (node)
-		elif isOf:
+		elif isOf or isIn:
 			AddToOutputs (' ')
 		output += nodeText
 		remappedOutput += remappedNodeText
-		if isOf or node.type in ['return', 'class', 'function']:
+		if isOf or isIn or node.type in ['return', 'class', 'function']:
 			siblingIdx = node.parent.children.index(node)
 			if len(node.parent.children) > siblingIdx + 1 and node.parent.children[siblingIdx + 1].type in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']:
 				AddToOutputs (' ')
@@ -93,10 +94,9 @@ def TryMangleNode (node):
 		usedNames.append(nodeText)
 
 def Compress (filePath : str):
-	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', outputPath]
+	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', filePath]
 	subprocess.check_call(cmd)
-	jsZipped = open(outputPath + '.gz', 'rb').read()
-	return base64.b64encode(jsZipped).decode('utf-8')
+	return open(filePath + '.gz', 'rb').read()
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDICATOR):
@@ -115,14 +115,17 @@ if len(output) > len(remappedOutput):
 print(output)
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
+base64EncodedJsBytes = base64.b64encode(jsBytes).decode('utf-8')
 outputWithDecompression = '''u=async(u,t)=>{d=new DecompressionStream('gzip')
 r=await fetch('data:application/octet-stream;base64,'+u)
 b=await r.blob()
 s=b.stream().pipeThrough(d)
 o=await new Response(s).blob()
 return await o.text()}
-u("%s",1).then((j)=>{eval(j)})''' %jsBytes
-if len(output) > len(outputWithDecompression):
+u("%s",1).then((j)=>{eval(j)})''' %base64EncodedJsBytes
+open(outputPath, 'w').write(outputWithDecompression)
+jsBytesWithDecompression = Compress(outputPath)
+if len(jsBytes) > len(jsBytesWithDecompression):
 	output = outputWithDecompression
 print(output)
 open(outputPath, 'w').write(output)
