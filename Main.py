@@ -111,8 +111,8 @@ def TryMangleNode (node) -> str:
 	nodeText = node.text.decode('utf-8')
 	if nodeText in JS_NAMES:
 		return nodeText
-	usedNames_ = usedNames[currentFuncName]
 	if len(nodeText) > 1:
+		usedNames_ = usedNames[currentFuncName]
 		mangledMembers_ = mangledMembers[currentFuncName]
 		if nodeText not in mangledMembers_:
 			while unusedNames[currentFuncName] == []:
@@ -124,7 +124,7 @@ def TryMangleNode (node) -> str:
 				usedNames[currentFuncName].append(mangledMembers[currentFuncName][nodeText])
 		if nodeText in mangledMembers[currentFuncName]:
 			nodeText = mangledMembers[currentFuncName][nodeText]
-	elif nodeText not in usedNames_:
+	elif nodeText not in usedNames[currentFuncName]:
 		usedNames[currentFuncName].append(nodeText)
 	return nodeText
 
