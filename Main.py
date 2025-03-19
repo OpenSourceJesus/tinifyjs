@@ -6,17 +6,18 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-REMAP_CODE = '''m={}
+REMAP_CODE = '''mr={}
+F='function'
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-while(a in m){s++
+while(a in mr){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
-m[a]=1}catch(e){}}}'''
-OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
-OKAY_NAME_CHARS.remove('m')
+mr[a]=1}catch(e){}}}eval(`'''
+OKAY_NAME_CHARS = list(string.ascii_letters + '_')
+OKAY_NAME_CHARS.remove('F')
 JS_NAMES = ['Math', 'document', 'style', 'window']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
@@ -53,6 +54,9 @@ def WalkTree (node):
 		elif nodeText in ['let', 'var']:
 			nodeText = 'var '
 			remappedNodeText = 'var '
+		elif nodeText == 'function':
+			nodeText = '${F}'
+			remappedNodeText = nodeText
 		output += nodeText
 		remappedOutput += remappedNodeText
 		siblingIdx = node.parent.children.index(node)
@@ -86,12 +90,14 @@ def TryMangleOrRemapNode (node) -> (str, bool):
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
 			return (MEMBER_REMAP[nodeText], False)
-		elif node.parent.type in ['method_definition', 'member_expression']:
-			return (TryMangleNode(node), True)
 		else:
-			siblingIdx = node.parent.children.index(node)
-			if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
+			parentNodeText = node.parent.text.decode('utf-8')
+			if node.parent.type in ['method_definition'] or parentNodeText in usedNames[currentFuncName] or parentNodeText in JS_NAMES:
 				return (TryMangleNode(node), True)
+			else:
+				siblingIdx = node.parent.children.index(node)
+				if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
+					return (TryMangleNode(node), True)
 	return (nodeText, None)
 
 def TryMangleNode (node) -> str:
@@ -104,7 +110,7 @@ def TryMangleNode (node) -> str:
 			unusedNames_ = unusedNames[currentFuncName]
 			while unusedNames_ == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in']:
+				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in', 'mr']:
 					unusedNames[currentFuncName].append(unusedName)
 			mangledMembers[nodeText] = unusedNames_.pop(random.randint(0, len(unusedNames_) - 1))
 			if mangledMembers[nodeText] not in usedNames_:
@@ -143,21 +149,7 @@ WalkTree (tree.root_node)
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
+output += '`)'
 print(output)
 open(outputPath, 'w').write(output)
-jsBytes = Compress(outputPath)
-base64EncodedJsBytes = base64.b64encode(jsBytes).decode('utf-8')
-outputWithDecompression = '''u=async(u,t)=>{d=new DecompressionStream('gzip')
-r=await fetch('data:application/octet-stream;base64,'+u)
-b=await r.blob()
-s=b.stream().pipeThrough(d)
-o=await new Response(s).blob()
-return await o.text()}
-u("%s",1).then((j)=>{eval(j)})''' %base64EncodedJsBytes
-open(outputPath, 'w').write(outputWithDecompression)
-jsBytesWithDecompression = Compress(outputPath)
-if len(jsBytes) > len(jsBytesWithDecompression):
-	output = outputWithDecompression
-print(output)
-open(outputPath, 'w').write(output)
-Compress (outputPath)
+Compress(outputPath)
