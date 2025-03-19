@@ -39,23 +39,15 @@ usedNames = {}
 usedNames[currentFuncName] = []
 
 def WalkTree (node):
-	global output, nodeText, currentFunc, remappedOutput, remappedNodeText
+	global output, nodeText, currentFunc, currentFuncName, remappedOutput
 	nodeText = node.text.decode('utf-8')
 	print(node.type, nodeText)
-	remappedNodeText = nodeText
-	if len(node.children) == 0:
-		siblingIdx = node.parent.children.index(node)
-		if (node.type == 'identifier' and siblingIdx > 0 and node.parent.children[siblingIdx - 1].type == 'function') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
-			currentFuncName = nodeText
-			currentFunc = node
-			unusedNames[currentFuncName] = []
-			unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
-			usedNames[currentFuncName] = []
-		isOfOrIn = node.type in ['of', 'in']
+	if node.children == []:
 		mangleOrRemapResults = TryMangleOrRemapNode(node)
 		remappedNodeText = mangleOrRemapResults[0]
 		if mangleOrRemapResults[1]:
 			nodeText = remappedNodeText
+		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
 		if nodeText == 'let':
@@ -63,17 +55,22 @@ def WalkTree (node):
 			remappedNodeText = 'var'
 		output += nodeText
 		remappedOutput += remappedNodeText
+		siblingIdx = node.parent.children.index(node)
 		hasNextSibling = len(node.parent.children) > siblingIdx + 1
 		nextSiblingType = None
 		if hasNextSibling:
 			nextSiblingType = node.parent.children[siblingIdx + 1].type
-		if hasNextSibling and (((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration'])):
+		if hasNextSibling and (((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration']) or node.type == 'new'):
 			AddToOutputs (' ')
-		elif node.type == 'new':
-			AddToOutputs (' ')
-		if currentFunc and AtEndOfHierarchy(currentFunc, node):
+		elif currentFunc and AtEndOfHierarchy(currentFunc, node):
 			currentFuncName = ''
 			currentFunc = None
+		if (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
+			currentFuncName = nodeText
+			currentFunc = node.parent
+			unusedNames[nodeText] = []
+			unusedNames[nodeText].extend(OKAY_NAME_CHARS)
+			usedNames[nodeText] = []
 	for n in node.children:
 		WalkTree (n)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeText.endswith(';') and node.end_byte < len(text) - 1:
@@ -93,7 +90,7 @@ def TryMangleOrRemapNode (node) -> (str, bool):
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
 			return (MEMBER_REMAP[nodeText], False)
-		elif node.parent.type == 'method_definition':
+		elif node.parent.type in ['method_definition', 'member_expression']:
 			return (TryMangleNode(node), True)
 		else:
 			siblingIdx = node.parent.children.index(node)
@@ -109,7 +106,7 @@ def TryMangleNode (node) -> str:
 	if len(nodeText) > 1:
 		if nodeText not in mangledMembers:
 			unusedNames_ = unusedNames[currentFuncName]
-			while len(unusedNames_) == 0:
+			while unusedNames_ == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
 				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in']:
 					unusedNames[currentFuncName].append(unusedName)
@@ -123,8 +120,6 @@ def TryMangleNode (node) -> str:
 	return nodeText
 
 def AtEndOfHierarchy (root, node) -> bool:
-	if not root.text.decode('utf-8').endswith(node.text.decode('utf-8')):
-		return False
 	while True:
 		if root.children == []:
 			return root == node
