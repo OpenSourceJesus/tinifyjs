@@ -4,7 +4,7 @@ _thisDir = os.path.split(os.path.abspath(__file__))[0]
 _memberRemapFilePath = os.path.join(_thisDir, 'MemberRemap') 
 _memberRemapFileText = open(_memberRemapFilePath, 'r').read()
 memberRemap = {}
-dontUseNames = []
+memberRemapWithNameCopies = []
 for line in _memberRemapFileText.split('\n'):
 	parts = line.split()
 	if parts != []:
@@ -15,15 +15,14 @@ for line in _memberRemapFileText.split('\n'):
 			name = parts[0]
 			newName = parts[1]
 			line = name + ' ' + newName
-		if len(name) < 3:
-			dontUseNames.append(name)
-		if name in memberRemap:
-			if line.startswith(name + ' '):
-				dontUseNames.append(name)
-		else:
-			memberRemap[name] = newName
-for i, name in enumerate(dontUseNames):
-	if i < len(dontUseNames) - 1 and name in dontUseNames[i + 1 :]:
+		if len(name) > 2 and len(newName) < 3:
+			if name in memberRemap:
+				if line.startswith(name + ' '):
+					memberRemapWithNameCopies.append(name)
+			else:
+				memberRemap[name] = newName
+for i, name in enumerate(memberRemapWithNameCopies):
+	if i < len(memberRemapWithNameCopies) - 1 and name in memberRemapWithNameCopies[i + 1 :] and name in memberRemap:
 		del memberRemap[name]
 sortedNames = sorted(memberRemap.keys(), key = len, reverse = True)
 sortedMemberRemap = dict(zip(sortedNames, [memberRemap[key] for key in sortedNames]))

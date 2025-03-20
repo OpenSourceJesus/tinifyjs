@@ -410,7 +410,6 @@ onpause ps
 onreset re
 onwheel nl
 onpaste sa
-writeln undefinedw
 prefix p
 append pd
 before b
@@ -483,4 +482,3 @@ map ap
 URL U
 dir d
 all ll
-id i

@@ -6,15 +6,16 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-REMAP_CODE = '''ms={}
+OUTPUT_PREFIX = 'F="function ";F="return ";W="while(";E="else{";d=document;w=window;m=Math;eval(`'
+REMAP_CODE = '''M={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-while(a in ms){s++
+${W}a in M){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
-ms[a]=1}catch(e){}}}'''
+M[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['Math', 'document', 'style', 'window']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
@@ -29,18 +30,26 @@ output = ''
 remappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
 currentFuncName = ''
+currentFuncText = ''
 currentFunc = None
+currentRemappedFuncText = ''
+currentFuncVarsDeclrsText = ''
+currentRemappedFuncVarsDeclrsText = ''
+currentVarDeclrText = ''
+currentVarDeclr = None
+currentRemappedVarDeclrText = ''
+globalVarsDeclrsText = ''
+globalRemappedVarsDeclrsText = ''
 unusedNames = {}
 unusedNames[currentFuncName] = []
 unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = []
-usedNames[currentFuncName].extend(['F', 'M', 'W'])
+usedNames[currentFuncName] = ['F', 'R', 'W', 'E', 'd', 'w', 'm', 'M', 'if', 'do', 'of', 'in']
 
 def WalkTree (node):
-	global output, nodeText, currentFunc, mangledMembers, currentFuncName, remappedOutput
+	global output, nodeText, currentFunc, mangledMembers, currentFuncName, remappedOutput, currentFuncText, currentVarDeclr, currentVarDeclrText, globalVarsDeclrsText, currentRemappedFuncText, globalRemappedVarsDeclrsText, currentRemappedVarDeclrText, currentFuncVarsDeclrsText, currentRemappedFuncVarsDeclrsText
 	nodeText = node.text.decode('utf-8')
 	print(node.type, nodeText)
 	if node.children == []:
@@ -57,16 +66,42 @@ def WalkTree (node):
 		elif node.type == 'function':
 			nodeText = '${F}'
 			remappedNodeText = nodeText
-		output += nodeText
-		remappedOutput += remappedNodeText
+		elif node.type == 'return':
+			nodeText = '${R}'
+			remappedNodeText = nodeText
+		elif node.type == 'while':
+			nodeText = '${W}'
+			remappedNodeText = nodeText
+		elif node.type == 'else':
+			nodeText = '${E}'
+			remappedNodeText = nodeText
+		if not currentFunc and not not currentVarDeclr:
+			output += nodeText
+			remappedOutput += remappedNodeText
+		else:
+			if currentVarDeclr:
+				currentVarDeclrText += nodeText
+				currentRemappedVarDeclrText += remappedNodeText
+				if AtEndOfHierarchy(currentVarDeclr, node):
+					currentFuncVarsDeclrsText += currentVarDeclrText + ','
+					currentRemappedFuncVarsDeclrsText += currentRemappedVarDeclrText + ','
+					currentVarDeclrText = ''
+					currentRemappedVarDeclrText = ''
+					currentVarDeclr = None
+			if currentFunc and AtEndOfHierarchy(currentFunc, node):
+				output += currentFuncVarsDeclrsText + currentFuncText
+				remappedOutput += currentRemappedFuncVarsDeclrsText + currentRemappedFuncText
+				currentFuncName = ''
+				currentFuncText = ''
+				currentFunc = None
+				currentFuncVarsDeclrsText = ''
+				currentRemappedFuncVarsDeclrsText = ''
+				currentRemappedFuncText = ''
 		siblingIdx = node.parent.children.index(node)
 		if len(node.parent.children) > siblingIdx + 1:
 			nextSiblingType = node.parent.children[siblingIdx + 1].type
-			if node.type in ['new', 'delete'] or ((isOfOrIn or node.type in ['return', 'class', 'function']) and nextSiblingType in ['identifier', 'binary_expression', 'call_expression', 'member_expression', 'subscript_expression', 'false', 'true']) or (node.type == 'else' and nextSiblingType in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement', 'return', 'while']):
+			if node.type in ['new', 'delete'] or ((isOfOrIn or node.type in ['return', 'class', 'function','else']) and nextSiblingType not in ['{', '[']):
 				AddToOutputs (' ')
-		elif currentFunc and AtEndOfHierarchy(currentFunc, node):
-			currentFuncName = ''
-			currentFunc = None
 		if (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeText
 			currentFunc = node.parent
@@ -77,23 +112,38 @@ def WalkTree (node):
 					unusedNames[nodeText].remove(unusedName)
 			usedNames[nodeText] = usedNames['']
 			mangledMembers[currentFuncName] = mangledMembers['']
+	elif node.type == 'variable_declarator':
+		currentVarDeclr = node
 	for n in node.children:
 		WalkTree (n)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeText.endswith(';') and node.end_byte < len(text) - 1:
 		AddToOutputs (';')
 
 def AddToOutputs (add : str):
-	global output, remappedOutput
-	output += add
-	remappedOutput += add
+	global output, currentFuncText, remappedOutput, globalVarsDeclrsText, currentVarDeclrText, currentRemappedFuncText, globalRemappedVarsDeclrsText, currentRemappedVarDeclrText
+	if currentVarDeclr:
+		if currentFunc:
+			globalVarsDeclrsText += add
+			globalRemappedVarsDeclrsText += add
+		else:
+			currentVarDeclrText += add
+			currentRemappedVarDeclrText += add
+	elif currentFunc:
+		currentFuncText += add
+		currentRemappedFuncText += add
+	else:
+		output += add
+		remappedOutput += add
 
 def TryMangleOrRemapNode (node) -> ():
 	nodeText = node.text.decode('utf-8')
 	if node.type == 'identifier':
-		if nodeText == 'Math':
-			return ('M', True)
+		if nodeText == 'document':
+			return ('d', True)
 		elif nodeText == 'window':
-			return ('W', True)
+			return ('w', True)
+		elif nodeText == 'Math':
+			return ('m', True)
 		return (TryMangleNode(node), True)
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
@@ -118,7 +168,7 @@ def TryMangleNode (node) -> str:
 		if nodeText not in mangledMembers_:
 			while unusedNames[currentFuncName] == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers_ and unusedName not in usedNames_ and unusedName not in ['if', 'do', 'of', 'in', 'ms']:
+				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers_ and unusedName not in usedNames_:
 					unusedNames[currentFuncName].append(unusedName)
 			mangledMembers[currentFuncName][nodeText] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
 			if mangledMembers[currentFuncName][nodeText] not in usedNames_:
@@ -154,10 +204,15 @@ for arg in sys.argv:
 jsBytes = bytes(text, 'utf8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-remappedOutput = REMAP_CODE + remappedOutput
-if len(output) > len(remappedOutput):
-	output = remappedOutput
-output = 'F="function";W=window;M=Math;eval(`' + output + '`)'
-print(output)
+output = OUTPUT_PREFIX + globalVarsDeclrsText + output + '`)'
 open(outputPath, 'w').write(output)
-Compress(outputPath)
+jsBytesLen = len(Compress(outputPath))
+remappedOutput = OUTPUT_PREFIX + REMAP_CODE + globalRemappedVarsDeclrsText + remappedOutput + '`)'
+open(outputPath, 'w').write(remappedOutput)
+remappedJsBytesLen = len(Compress(outputPath))
+if jsBytesLen > remappedJsBytesLen:
+	print(output)
+	open(outputPath, 'w').write(output)
+	Compress (outputPath)
+else:
+	print(remappedOutput)
