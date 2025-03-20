@@ -16,8 +16,6 @@ a=n[s]+n[e]
 e--}try{p[a]=p[n]
 ms[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
-OKAY_NAME_CHARS.remove('F')
-OKAY_NAME_CHARS.remove('M')
 JS_NAMES = ['Math', 'document', 'style', 'window']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 MEMBER_REMAP = {}
@@ -34,11 +32,12 @@ currentFuncName = ''
 currentFunc = None
 unusedNames = {}
 unusedNames[currentFuncName] = []
-unusedNames[currentFuncName].extend(OKAY_NAME_CHARS + ['F', 'M'])
+unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
 usedNames[currentFuncName] = []
+usedNames[currentFuncName].extend(['F', 'M', 'W'])
 
 def WalkTree (node):
 	global output, nodeText, currentFunc, mangledMembers, currentFuncName, remappedOutput
@@ -55,9 +54,9 @@ def WalkTree (node):
 		elif node.type in ['let', 'var', 'const']:
 			nodeText = 'var '
 			remappedNodeText = nodeText
-		# elif node.type == 'function':
-		# 	nodeText = '${F}'
-		# 	remappedNodeText = nodeText
+		elif node.type == 'function':
+			nodeText = '${F}'
+			remappedNodeText = nodeText
 		output += nodeText
 		remappedOutput += remappedNodeText
 		siblingIdx = node.parent.children.index(node)
@@ -93,6 +92,8 @@ def TryMangleOrRemapNode (node) -> ():
 	if node.type == 'identifier':
 		if nodeText == 'Math':
 			return ('M', True)
+		elif nodeText == 'window':
+			return ('W', True)
 		return (TryMangleNode(node), True)
 	elif node.type == 'property_identifier':
 		if nodeText in MEMBER_REMAP:
@@ -156,7 +157,7 @@ WalkTree (tree.root_node)
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
-# output = 'F="function";M=Math;eval(`' + output + '`)'
+output = 'F="function";W=window;M=Math;eval(`' + output + '`)'
 print(output)
 open(outputPath, 'w').write(output)
 Compress(outputPath)
