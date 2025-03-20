@@ -12,17 +12,19 @@ for line in _memberRemapFileText.split('\n'):
 		newName = parts[1]
 		if len(parts) > 2:
 			parts.remove(name)
+			name = parts[0]
+			newName = parts[1]
 			line = name + ' ' + newName
 		if len(name) < 3:
 			dontUseNames.append(name)
 		if name in memberRemap:
 			if line.startswith(name + ' '):
 				dontUseNames.append(name)
-				break
 		else:
 			memberRemap[name] = newName
-for name in dontUseNames:
-	del memberRemap[name]
+for i, name in enumerate(dontUseNames):
+	if i < len(dontUseNames) - 1 and name in dontUseNames[i + 1 :]:
+		del memberRemap[name]
 sortedNames = sorted(memberRemap.keys(), key = len, reverse = True)
 sortedMemberRemap = dict(zip(sortedNames, [memberRemap[key] for key in sortedNames]))
 newText = ''

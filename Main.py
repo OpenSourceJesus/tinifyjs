@@ -55,9 +55,9 @@ def WalkTree (node):
 		elif node.type in ['let', 'var', 'const']:
 			nodeText = 'var '
 			remappedNodeText = nodeText
-		elif node.type == 'function':
-			nodeText = '${F}'
-			remappedNodeText = nodeText
+		# elif node.type == 'function':
+		# 	nodeText = '${F}'
+		# 	remappedNodeText = nodeText
 		output += nodeText
 		remappedOutput += remappedNodeText
 		siblingIdx = node.parent.children.index(node)
@@ -88,7 +88,7 @@ def AddToOutputs (add : str):
 	output += add
 	remappedOutput += add
 
-def TryMangleOrRemapNode (node) -> (str, bool):
+def TryMangleOrRemapNode (node) -> ():
 	nodeText = node.text.decode('utf-8')
 	if node.type == 'identifier':
 		if nodeText == 'Math':
@@ -99,7 +99,7 @@ def TryMangleOrRemapNode (node) -> (str, bool):
 			return (MEMBER_REMAP[nodeText], False)
 		else:
 			parentNodeText = node.parent.text.decode('utf-8')
-			if node.parent.type in ['method_definition'] or parentNodeText not in usedNames[currentFuncName] or parentNodeText not in JS_NAMES:
+			if node.parent.type in ['method_definition'] and parentNodeText not in usedNames[currentFuncName] + JS_NAMES:
 				return (TryMangleNode(node), True)
 			else:
 				siblingIdx = node.parent.children.index(node)
@@ -156,7 +156,7 @@ WalkTree (tree.root_node)
 remappedOutput = REMAP_CODE + remappedOutput
 if len(output) > len(remappedOutput):
 	output = remappedOutput
-output = 'F="function";M=Math;eval(`' + output + '`)'
+# output = 'F="function";M=Math;eval(`' + output + '`)'
 print(output)
 open(outputPath, 'w').write(output)
 Compress(outputPath)
