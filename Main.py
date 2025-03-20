@@ -6,7 +6,7 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-OUTPUT_PREFIX = 'F="function ";F="return ";W="while(";E="else{";d=document;w=window;m=Math;eval(`'
+OUTPUT_PREFIX = 'F="function ";R="return ";W="while(";E="else{";d=document;w=window;m=Math;eval(`'
 REMAP_CODE = '''M={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
@@ -58,6 +58,10 @@ def WalkTree (node):
 		if mangleOrRemapResults[1]:
 			nodeText = remappedNodeText
 		isOfOrIn = node.type in ['of', 'in']
+		siblingIdx = node.parent.children.index(node)
+		nextSiblingType = None
+		if len(node.parent.children) > siblingIdx + 1:
+			nextSiblingType = node.parent.children[siblingIdx + 1].type
 		if isOfOrIn:
 			AddToOutputs (' ')
 		elif node.type in ['let', 'var', 'const']:
@@ -72,7 +76,7 @@ def WalkTree (node):
 		elif node.type == 'while':
 			nodeText = '${W}'
 			remappedNodeText = nodeText
-		elif node.type == 'else':
+		elif node.type == 'else' and nextSiblingType == '{':
 			nodeText = '${E}'
 			remappedNodeText = nodeText
 		if not currentFunc and not not currentVarDeclr:
@@ -97,11 +101,8 @@ def WalkTree (node):
 				currentFuncVarsDeclrsText = ''
 				currentRemappedFuncVarsDeclrsText = ''
 				currentRemappedFuncText = ''
-		siblingIdx = node.parent.children.index(node)
-		if len(node.parent.children) > siblingIdx + 1:
-			nextSiblingType = node.parent.children[siblingIdx + 1].type
-			if node.type in ['new', 'delete'] or ((isOfOrIn or node.type in ['return', 'class', 'function','else']) and nextSiblingType not in ['{', '[']):
-				AddToOutputs (' ')
+		if nextSiblingType and (node.type in ['new', 'delete'] or ((isOfOrIn or node.type in ['return', 'class', 'function','else']) and nextSiblingType not in ['{', '['])):
+			AddToOutputs (' ')
 		if (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeText
 			currentFunc = node.parent
@@ -123,11 +124,11 @@ def AddToOutputs (add : str):
 	global output, currentFuncText, remappedOutput, globalVarsDeclrsText, currentVarDeclrText, currentRemappedFuncText, globalRemappedVarsDeclrsText, currentRemappedVarDeclrText
 	if currentVarDeclr:
 		if currentFunc:
-			globalVarsDeclrsText += add
-			globalRemappedVarsDeclrsText += add
-		else:
 			currentVarDeclrText += add
 			currentRemappedVarDeclrText += add
+		else:
+			globalVarsDeclrsText += add
+			globalRemappedVarsDeclrsText += add
 	elif currentFunc:
 		currentFuncText += add
 		currentRemappedFuncText += add
@@ -150,7 +151,7 @@ def TryMangleOrRemapNode (node) -> ():
 			return (MEMBER_REMAP[nodeText], False)
 		else:
 			parentNodeText = node.parent.text.decode('utf-8')
-			if node.parent.type in ['method_definition'] and parentNodeText not in usedNames[currentFuncName] + JS_NAMES:
+			if node.parent.type == 'method_definition' and parentNodeText not in usedNames[currentFuncName] + JS_NAMES:
 				return (TryMangleNode(node), True)
 			else:
 				siblingIdx = node.parent.children.index(node)
@@ -201,7 +202,7 @@ for arg in sys.argv:
 	elif arg.startswith(OUTPUT_INDICATOR):
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
-jsBytes = bytes(text, 'utf8')
+jsBytes = text.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
 output = OUTPUT_PREFIX + globalVarsDeclrsText + output + '`)'
