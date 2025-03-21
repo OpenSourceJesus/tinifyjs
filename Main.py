@@ -6,16 +6,16 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-OUTPUT_PREFIX = 'F="function ";R="return ";D="delete ";W="while(";C="class ";E="else{";e="else ";d=document;w=window;m=Math;eval(`'
-REMAP_CODE = '''M={}
+OUTPUT_PREFIX = 'ƒ="function ";Š="return ";Ž="delete ";Œ="while(";Ç="class ";Ê="else{";Ë="else ";œ=document;ž=window;Ÿ=Math;eval(`'
+REMAP_CODE = '''À={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-${W}a in M){s++
+${Œ}a in À){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
-M[a]=1}catch(e){}}}'''
+À[a]=1}catch(e){}}}'''
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['style', 'document', 'window', 'Math']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
@@ -25,7 +25,7 @@ _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-text = ''
+txt = ''
 output = ''
 remappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
@@ -37,7 +37,7 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['F', 'R', 'D', 'W', 'C', 'E', 'e', 'd', 'w', 'm', 'M', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'œ', 'ž', 'Ÿ', 'ÿ', 'À', 'if', 'do', 'of', 'in']
 
 def WalkTree (node):
 	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName
@@ -60,33 +60,33 @@ def WalkTree (node):
 			nodeTxt = ''
 			remappedNodeTxt = nodeTxt
 		elif node.type == 'function':
-			nodeTxt = '${F}'
+			nodeTxt = '${ƒ}'
 			remappedNodeTxt = nodeTxt
 			# nodeTxt += ' '
 			# remappedNodeTxt = nodeTxt
 		elif node.type == 'return':
-			nodeTxt = '${R}'
+			nodeTxt = '${Š}'
 			remappedNodeTxt = nodeTxt
 			# nodeTxt += ' '
 			# remappedNodeTxt = nodeTxt
 		elif node.type == 'delete':
-			nodeTxt = '${D}'
+			nodeTxt = '${Ž}'
 			remappedNodeTxt = nodeTxt
 			# nodeTxt += ' '
 			# remappedNodeTxt = nodeTxt
 		elif node.type == 'while':
-			nodeTxt = '${W}'
+			nodeTxt = '${Œ}'
 			remappedNodeTxt = nodeTxt
 		elif node.type == 'class':
-			nodeTxt = '${C}'
+			nodeTxt = '${Ç}'
 			remappedNodeTxt = nodeTxt
 			# nodeTxt += ' '
 			# remappedNodeTxt = nodeTxt
 		elif node.type == 'else':
 			if nextSiblingType == '{':
-				nodeTxt = '${E}'
+				nodeTxt = '${Ê}'
 			else:
-				nodeTxt = '${e}'
+				nodeTxt = '${Ë}'
 			remappedNodeTxt = nodeTxt
 			# nodeTxt += ' '
 			# remappedNodeTxt = nodeTxt
@@ -109,7 +109,7 @@ def WalkTree (node):
 			AddToOutputs (' ')
 	for child in node.children:
 		WalkTree (child)
-	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and nextSiblingType != '}' and node.end_byte < len(text) - 1:
+	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and nextSiblingType != '}' and node.end_byte < len(txt) - 1:
 		AddToOutputs (';')
 
 def AddToOutputs (add : str):
@@ -121,11 +121,11 @@ def TryMangleOrRemapNode (node) -> (str, None):
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == 'identifier':
 		if nodeTxt == 'document':
-			return ('d', True)
+			return ('œ', True)
 		elif nodeTxt == 'window':
-			return ('w', True)
+			return ('ž', True)
 		elif nodeTxt == 'Math':
-			return ('m', True)
+			return ('Ÿ', True)
 		return (TryMangleNode(node), True)
 	elif node.type == 'property_identifier':
 		if nodeTxt in MEMBER_REMAP:
@@ -177,19 +177,20 @@ def Compress (filePath : str) -> str:
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDICATOR):
-		text += arg[len(TEXT_INDICATOR) :]
+		txt += arg[len(TEXT_INDICATOR) :]
 	elif arg.startswith(INPUT_INDICATOR):
-		text += open(arg[len(INPUT_INDICATOR) :], 'r').read()
+		txt += open(arg[len(INPUT_INDICATOR) :], 'r').read()
 	elif arg.startswith(OUTPUT_INDICATOR):
 		outputPath = arg[len(OUTPUT_INDICATOR) :]
 
-jsBytes = text.encode('utf-8')
+jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
 output = OUTPUT_PREFIX + output + '`)'
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
 remappedOutput = OUTPUT_PREFIX + REMAP_CODE + remappedOutput + '`)'
+# REMAP_CODE = REMAP_CODE.replace('${Œ}', 'while(')
 # remappedOutput = REMAP_CODE + remappedOutput
 open(outputPath, 'w').write(remappedOutput)
 remappedJsBytesLen = len(Compress(outputPath))

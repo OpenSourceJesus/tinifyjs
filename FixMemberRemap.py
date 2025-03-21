@@ -28,5 +28,6 @@ sortedNames = sorted(memberRemap.keys(), key = len, reverse = True)
 sortedMemberRemap = dict(zip(sortedNames, [memberRemap[key] for key in sortedNames]))
 newText = ''
 for name, newName in sortedMemberRemap.items():
-	newText += name + ' ' + newName + '\n'
+	if newName not in ['if', 'do', 'of', 'in']:
+		newText += name + ' ' + newName + '\n'
 open(_memberRemapFilePath, 'w').write(newText[: -1])

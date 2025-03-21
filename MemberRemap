@@ -74,7 +74,6 @@ onvisibilitychange vg
 webkitIsFullScreen IS
 onpointerrawupdate np
 ontransitioncancel nl
-pointerLockElement in
 adoptedStyleSheets ds
 createCDATASection eo
 createNodeIterator ta
@@ -147,7 +146,6 @@ toLocaleString Ln
 implementation mn
 onbeforetoggle bl
 onvolumechange vg
-onpointerenter in
 onpointerleave pv
 onanimationend nd
 createTextNode ao
@@ -356,7 +354,6 @@ includes ns
 matchAll al
 padStart at
 toString og
-trimLeft if
 findLast it
 toSorted Se
 referrer er
@@ -432,7 +429,6 @@ domain d
 cookie oi
 images ms
 embeds ms
-hidden in
 onblur bu
 ondrag ng
 ondrop np
