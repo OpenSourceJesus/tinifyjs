@@ -6,7 +6,14 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-OUTPUT_PREFIX = 'ƒ="function ";Š="return ";Ž="delete ";Œ="while(";Ç="class ";Ê="else{";Ë="else ";œ=document;ž=window;Ÿ=Math;eval(`'
+ARGS_INDICATORS = [ '€', '†', '‡', '•' , '—', '™', '¢', '£', '¤']
+MEMBER_REMAP = {}
+_thisDir = os.path.split(os.path.abspath(__file__))[0]
+_memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
+for line in _memberRemap.split('\n'):
+	parts = line.split()
+	MEMBER_REMAP[parts[0]] = parts[1]
+OUTPUT_PREFIX = 'ƒ="function ";Š="return ";Ž="delete ";Œ="while(";Ç="class ";Ê="else{";Ë="else ";œ=document;ž=window;Ÿ=Math;ÿ=`'
 REMAP_CODE = '''À={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
@@ -16,15 +23,19 @@ ${Œ}a in À){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
 À[a]=1}catch(e){}}}'''
+ARGS_CONDENSE_CODE = '''function û(a,i){ý=ý.slice(0,a)+i+ý.slice(a)}þ=0
+ý=''' + str(ARGS_INDICATORS).replace(' ', '') + '''
+for(c of ÿ){l=ý.find(c)
+if(l>-1){û(þ,'(')
+for(i=0;i<l;i+=2)û(l,',')
+l+=2
+û(l,')')}þ++}'''
+REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
+for name, newName in MEMBER_REMAP.items():
+	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['style', 'document', 'window', 'Math']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
-MEMBER_REMAP = {}
-_thisDir = os.path.split(os.path.abspath(__file__))[0]
-_memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
-for line in _memberRemap.split('\n'):
-	parts = line.split()
-	MEMBER_REMAP[parts[0]] = parts[1]
 txt = ''
 output = ''
 remappedOutput = ''
@@ -37,10 +48,11 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'œ', 'ž', 'Ÿ', 'ÿ', 'À', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'œ', 'ž', 'Ÿ', 'ÿ', 'þ', 'ý', 'À', 'if', 'do', 'of', 'in']
+skipNodesAtPositions = []
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName
+	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
@@ -62,36 +74,44 @@ def WalkTree (node):
 		elif node.type == 'function':
 			nodeTxt = '${ƒ}'
 			remappedNodeTxt = nodeTxt
-			# nodeTxt += ' '
-			# remappedNodeTxt = nodeTxt
 		elif node.type == 'return':
 			nodeTxt = '${Š}'
 			remappedNodeTxt = nodeTxt
-			# nodeTxt += ' '
-			# remappedNodeTxt = nodeTxt
 		elif node.type == 'delete':
 			nodeTxt = '${Ž}'
 			remappedNodeTxt = nodeTxt
-			# nodeTxt += ' '
-			# remappedNodeTxt = nodeTxt
 		elif node.type == 'while':
 			nodeTxt = '${Œ}'
 			remappedNodeTxt = nodeTxt
 		elif node.type == 'class':
 			nodeTxt = '${Ç}'
 			remappedNodeTxt = nodeTxt
-			# nodeTxt += ' '
-			# remappedNodeTxt = nodeTxt
 		elif node.type == 'else':
 			if nextSiblingType == '{':
 				nodeTxt = '${Ê}'
 			else:
 				nodeTxt = '${Ë}'
 			remappedNodeTxt = nodeTxt
-			# nodeTxt += ' '
-			# remappedNodeTxt = nodeTxt
-		output += nodeTxt
-		remappedOutput += remappedNodeTxt
+		elif node.type == '(':
+			siblings = node.parent.children
+			argCount = 0
+			for sibling in siblings[1 :]:
+				if sibling.type != ',':
+					if len(sibling.text) == 1:
+						argCount += 1
+						skipNodesAtPositions.append(sibling.end_byte)
+					else:
+						argCount = 0
+						skipNodesAtPositions = []
+						break
+				else:
+					skipNodesAtPositions.append(sibling.end_byte)
+			if argCount > 0 and argCount - 1 == len(ARGS_INDICATORS):
+				nodeTxt = ARGS_INDICATORS[argCount - 1]
+				remappedNodeTxt = nodeTxt
+		if node.end_byte not in skipNodesAtPositions:
+			output += nodeTxt
+			remappedOutput += remappedNodeTxt
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			currentFuncName = ''
 			currentFunc = None
@@ -186,12 +206,10 @@ for arg in sys.argv:
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = OUTPUT_PREFIX + output + '`)'
+output = OUTPUT_PREFIX + output + '`\n' + ARGS_CONDENSE_CODE + 'eval(ÿ)'
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
-remappedOutput = OUTPUT_PREFIX + REMAP_CODE + remappedOutput + '`)'
-# REMAP_CODE = REMAP_CODE.replace('${Œ}', 'while(')
-# remappedOutput = REMAP_CODE + remappedOutput
+remappedOutput = OUTPUT_PREFIX + REMAP_CODE + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + 'eval(ÿ)'
 open(outputPath, 'w').write(remappedOutput)
 remappedJsBytesLen = len(Compress(outputPath))
 if len(jsBytes) < remappedJsBytesLen:

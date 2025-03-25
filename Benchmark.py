@@ -3,7 +3,7 @@ from Main import *
 
 results = {}
 inputPath = '/tmp/tinifyjs Benchmark Input.js'
-open(inputPath, 'w').write(text)
+open(inputPath, 'w').write(txt)
 results['tinifyjs'] = len(open(outputPath + '.gz', 'rb').read())
 outputPathPrefix = '/tmp/tinifyjs Benchmark Output'
 js = subprocess.run(['uglifyjs', inputPath, '-m'], capture_output = True).stdout
