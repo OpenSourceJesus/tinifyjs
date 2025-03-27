@@ -25,17 +25,16 @@ e--}try{p[a]=p[n]
 À[a]=1}catch(e){}}}'''
 ARGS_CONDENSE_CODE = 'ý=' + str(ARGS_INDICATORS).replace(' ', '') + '''
 ü=''
-for(p=0;p<ý.length;p++){c=ý[p]
+for(p=0;p<ÿ.length;p++){c=ÿ[p]
 l=ý.indexOf(c)
 if(l>-1){ü+='('
-for(i=0;i<l;i++)if(i%2<1)ü+=ý[p]
-ü+=','
-p++}else ü+=c
-ü+=')'
-p++}'''
+p++
+for(i=0;i<l;i++){ü+=ÿ[p]
+if(i<l-1){ü+=','
+p++}}ü+=')'}else ü+=c}'''
 REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
-for name, newName in MEMBER_REMAP.items():
-	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
+# for name, newName in MEMBER_REMAP.items():
+# 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['style', 'document', 'window', 'Math']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
@@ -51,7 +50,7 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'Ð', 'ž', 'Ÿ', 'ÿ', 'þ', 'ý', 'À', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'Ð', 'ž', 'Ÿ', 'ÿ', 'ü', 'ý', 'À', 'if', 'do', 'of', 'in']
 skipNodesAtPositions = []
 
 def WalkTree (node):
@@ -59,10 +58,11 @@ def WalkTree (node):
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
-		siblingIdx = node.parent.children.index(node)
+		siblings = node.parent.children
+		siblingIdx = siblings.index(node)
 		nextSiblingType = None
-		if len(node.parent.children) > siblingIdx + 1:
-			nextSiblingType = node.parent.children[siblingIdx + 1].type
+		if len(siblings) > siblingIdx + 1:
+			nextSiblingType = siblings[siblingIdx + 1].type
 	if node.children == []:
 		mangleOrRemapResults = TryMangleOrRemapNode(node)
 		remappedNodeTxt = mangleOrRemapResults[0]
@@ -96,23 +96,22 @@ def WalkTree (node):
 				nodeTxt = '${Ë}'
 			remappedNodeTxt = nodeTxt
 		elif node.type == '(':
-			siblings = node.parent.children
-			argCount = 0
-			for sibling in siblings[1 :]:
+			argCnt = 0
+			for sibling in siblings[1 : -1]:
 				if sibling.type != ',':
-					if len(sibling.text) == 1:
-						argCount += 1
-						skipNodesAtPositions.append(sibling.end_byte)
-					else:
-						argCount = 0
+					argCnt += 1
+					if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
+						argCnt = 0
 						skipNodesAtPositions = []
 						break
 				else:
 					skipNodesAtPositions.append(sibling.end_byte)
-			if argCount > 0 and argCount - 1 == len(ARGS_INDICATORS):
-				nodeTxt = ARGS_INDICATORS[argCount - 1]
-				remappedNodeTxt = nodeTxt
-		if node.end_byte not in skipNodesAtPositions:
+			if argCnt > 0 and argCnt < len(ARGS_INDICATORS):
+				nodeTxt = ''
+				remappedNodeTxt = ''
+				AddToOutputs (ARGS_INDICATORS[argCnt])
+				skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
+		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			output += nodeTxt
 			remappedOutput += remappedNodeTxt
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
@@ -173,7 +172,7 @@ def TryMangleNode (node) -> str:
 			usedNames_ = usedNames[currentFuncName]
 			while unusedNames[currentFuncName] == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in MEMBER_REMAP.values() and unusedName not in mangledMembers_ and unusedName not in usedNames_:
+				if unusedName not in list(MEMBER_REMAP.values()) + list(mangledMembers_.keys()) + usedNames_:
 					unusedNames[currentFuncName].append(unusedName)
 			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
 			if mangledMembers[currentFuncName][nodeTxt] not in usedNames_:
