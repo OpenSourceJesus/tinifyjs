@@ -13,23 +13,26 @@ _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-OUTPUT_PREFIX = 'ƒ="function ";Š="return ";Ž="delete ";Œ="while(";Ç="class ";Ê="else{";Ë="else ";œ=document;ž=window;Ÿ=Math;ÿ=`'
+OUTPUT_PREFIX = 'ƒ="function ";Š="return ";Ž="delete ";Œ="while(";Ç="class ";Ê="else{";Ë="else ";Ð=document;ž=window;Ÿ=Math;'
 REMAP_CODE = '''À={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-${Œ}a in À){s++
+while(a in À){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
 À[a]=1}catch(e){}}}'''
-ARGS_CONDENSE_CODE = '''function û(a,i){ý=ý.slice(0,a)+i+ý.slice(a)}þ=0
-ý=''' + str(ARGS_INDICATORS).replace(' ', '') + '''
-for(c of ÿ){l=ý.find(c)
-if(l>-1){û(þ,'(')
-for(i=0;i<l;i+=2)û(l,',')
-l+=2
-û(l,')')}þ++}'''
+ARGS_CONDENSE_CODE = 'ý=' + str(ARGS_INDICATORS).replace(' ', '') + '''
+ü=''
+for(p=0;p<ý.length;p++){c=ý[p]
+l=ý.indexOf(c)
+if(l>-1){ü+='('
+for(i=0;i<l;i++)if(i%2<1)ü+=ý[p]
+ü+=','
+p++}else ü+=c
+ü+=')'
+p++}'''
 REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
 for name, newName in MEMBER_REMAP.items():
 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
@@ -48,7 +51,7 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'œ', 'ž', 'Ÿ', 'ÿ', 'þ', 'ý', 'À', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['ƒ', 'Š', 'Ž', 'Œ', 'Ç', 'Ê', 'Ë', 'Ð', 'ž', 'Ÿ', 'ÿ', 'þ', 'ý', 'À', 'if', 'do', 'of', 'in']
 skipNodesAtPositions = []
 
 def WalkTree (node):
@@ -141,7 +144,7 @@ def TryMangleOrRemapNode (node) -> (str, None):
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == 'identifier':
 		if nodeTxt == 'document':
-			return ('œ', True)
+			return ('Ð', True)
 		elif nodeTxt == 'window':
 			return ('ž', True)
 		elif nodeTxt == 'Math':
@@ -206,10 +209,10 @@ for arg in sys.argv:
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = OUTPUT_PREFIX + output + '`\n' + ARGS_CONDENSE_CODE + 'eval(ÿ)'
+output = OUTPUT_PREFIX + '\nÿ=`' + output + '`\n' + ARGS_CONDENSE_CODE + 'eval(ü)'
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
-remappedOutput = OUTPUT_PREFIX + REMAP_CODE + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + 'eval(ÿ)'
+remappedOutput = OUTPUT_PREFIX + REMAP_CODE + '\nÿ=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + 'eval(ü)'
 open(outputPath, 'w').write(remappedOutput)
 remappedJsBytesLen = len(Compress(outputPath))
 if len(jsBytes) < remappedJsBytesLen:
