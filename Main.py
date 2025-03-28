@@ -6,8 +6,12 @@ PARSER = Parser(JS_LANG)
 TEXT_INDICATOR = '-t='
 INPUT_INDICATOR = '-i='
 OUTPUT_INDICATOR = '-o='
-ARGS_INDICATORS = ['', '', '', '', '', '', '', '', '	', '']
-IDXS_INDICATORS = ['', '', '', '']
+ARGS_INDICATORS = []
+for i in range(1, 11):
+	ARGS_INDICATORS.append(i)
+IDXS_INDICATORS = [0]
+for i in range(11, 14):
+	IDXS_INDICATORS.append(i)
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
 _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
@@ -15,26 +19,27 @@ for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
 OUTPUT_PREFIX = 'a="function ";b="return ";c="delete ";d="while(";e="class ";f="else{";g="else ";h=document;i=window;j=Math;'
-REMAP_CODE = '''À={}
+REMAP_CODE = '''k={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 a=n[s]
-while(a in À){s++
+while(a in k){s++
 a=n[s]+n[e]
 e--}try{p[a]=p[n]
-À[a]=1}catch(e){}}}'''
-ARGS_CONDENSE_CODE = 'ý=' + str(ARGS_INDICATORS).replace(' ', '') + '\nú=' + str(IDXS_INDICATORS).replace(' ', '') + '''
-û(ý,'(',')')
-ý=ü
-û(ú,'[',']')
-function û(a,s,e){for(p=0;p<ÿ.length;p++){c=ÿ[p]
-l=ý.indexOf(c)
-if(l>-1){ü+=s
+k[a]=1}catch(e){}}}'''
+ARGS_CONDENSE_CODE = 'a=' + str(ARGS_INDICATORS).replace(' ', '') + '\nb=' + str(IDXS_INDICATORS).replace(' ', '') + '''
+e=''
+l(a,'(',')')
+d=e
+l(b,'[',']')
+function l(f,g,h){for(p=0;p<d.length;p++){c=d[p]
+z=f.indexOf(c.charCodeAt(0))
+if(z>-1){e+=g
 p++
-for(i=0;i<l;i++){ü+=ÿ[p]
-if(i<l-1){ü+=','
-p++}}ü+=e}else ü+=c}}'''
+for(i=0;i<z;i++){e+=d[p]
+if(i<z-1){e+=','
+p++}}e+=h}else e+=c}}'''
 REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
 # for name, newName in MEMBER_REMAP.items():
 # 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
@@ -53,7 +58,7 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'if', 'do', 'of', 'in']
 skipNodesAtPositions = []
 
 def WalkTree (node):
@@ -112,7 +117,7 @@ def WalkTree (node):
 			if argCnt > 0 and argCnt < len(ARGS_INDICATORS):
 				nodeTxt = ''
 				remappedNodeTxt = ''
-				AddToOutputs (ARGS_INDICATORS[argCnt])
+				AddToOutputs (chr(ARGS_INDICATORS[argCnt]))
 				skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
 		elif node.type == '[':
 			idxCnt = 0
@@ -128,7 +133,7 @@ def WalkTree (node):
 			if idxCnt > 0 and idxCnt < len(IDXS_INDICATORS):
 				nodeTxt = ''
 				remappedNodeTxt = ''
-				AddToOutputs (IDXS_INDICATORS[idxCnt])
+				AddToOutputs (chr(IDXS_INDICATORS[idxCnt]))
 				skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			output += nodeTxt
@@ -227,10 +232,10 @@ for arg in sys.argv:
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = OUTPUT_PREFIX + '\ný=`' + output + '`\n' + ARGS_CONDENSE_CODE + 'eval(ü)'
+output = OUTPUT_PREFIX + '\na=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\neval(e)'
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
-remappedOutput = OUTPUT_PREFIX + REMAP_CODE + '\ný=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + 'eval(ü)'
+remappedOutput = OUTPUT_PREFIX + REMAP_CODE + '\na=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\neval(e)'
 open(outputPath, 'w').write(remappedOutput)
 remappedJsBytesLen = len(Compress(outputPath))
 if len(jsBytes) < remappedJsBytesLen:
