@@ -62,9 +62,8 @@ usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
 skipNodesAtPositions = []
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName, skipNodesAtPositions
+	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName, globalVarsCntLeft, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
-	print(node.type, nodeTxt)
 	if node.parent:
 		siblings = node.parent.children
 		siblingIdx = siblings.index(node)
@@ -104,37 +103,9 @@ def WalkTree (node):
 				nodeTxt = '${g}'
 			remappedNodeTxt = nodeTxt
 		elif node.type == '(':
-			argCnt = 0
-			for sibling in siblings[1 : -1]:
-				if sibling.type != ',':
-					argCnt += 1
-					if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
-						argCnt = 0
-						skipNodesAtPositions = []
-						break
-				else:
-					skipNodesAtPositions.append(sibling.end_byte)
-			if argCnt > 0 and argCnt < len(ARGS_INDICATORS):
-				nodeTxt = ''
-				remappedNodeTxt = ''
-				AddToOutputs (chr(ARGS_INDICATORS[argCnt]))
-				skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
+			CondenseArgs (node, ARGS_INDICATORS)
 		elif node.type == '[':
-			idxCnt = 0
-			for sibling in siblings[1 : -1]:
-				if sibling.type != ',':
-					idxCnt += 1
-					if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
-						idxCnt = 0
-						skipNodesAtPositions = []
-						break
-				else:
-					skipNodesAtPositions.append(sibling.end_byte)
-			if idxCnt > 0 and idxCnt < len(IDXS_INDICATORS):
-				nodeTxt = ''
-				remappedNodeTxt = ''
-				AddToOutputs (chr(IDXS_INDICATORS[idxCnt]))
-				skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
+			CondenseArgs (node, IDXS_INDICATORS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			output += nodeTxt
 			remappedOutput += remappedNodeTxt
@@ -157,6 +128,26 @@ def WalkTree (node):
 		WalkTree (child)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and nextSiblingType != '}' and node.end_byte < len(txt) - 1:
 		AddToOutputs (';')
+
+def CondenseArgs (node, argsCntsIndicatorsVals : list):
+	global skipNodesAtPositions
+	siblings = node.parent.children
+	argCnt = 0
+	for sibling in siblings[1 : -1]:
+		if sibling.type != ',':
+			argCnt += 1
+			if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
+				argCnt = 0
+				skipNodesAtPositions = []
+				break
+		else:
+			skipNodesAtPositions.append(sibling.end_byte)
+	if argCnt > 0 and argCnt < len(argsCntsIndicatorsVals):
+		nodeTxt = ''
+		remappedNodeTxt = ''
+		AddToOutputs (chr(argsCntsIndicatorsVals[argCnt]))
+		skipNodesAtPositions.append(node.end_byte)
+		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
 
 def AddToOutputs (add : str):
 	global output, remappedOutput
@@ -200,7 +191,8 @@ def TryMangleNode (node) -> str:
 					unusedNames[currentFuncName].append(unusedName)
 			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
 			if mangledMembers[currentFuncName][nodeTxt] not in usedNames_:
-				usedNames[currentFuncName].append(mangledMembers[currentFuncName][nodeTxt])
+				mangledMember = mangledMembers[currentFuncName][nodeTxt]
+				usedNames[currentFuncName].append(mangledMember)
 		if nodeTxt in mangledMembers[currentFuncName]:
 			nodeTxt = mangledMembers[currentFuncName][nodeTxt]
 	elif nodeTxt not in usedNames[currentFuncName]:
