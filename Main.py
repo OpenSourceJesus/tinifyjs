@@ -18,28 +18,28 @@ _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-OUTPUT_PREFIX = 'a="function ";b="return ";c="delete ";d="while(";e="class ";f="else{";g="else ";h=document;i=window;j=Math;'
-REMAP_CODE = '''k={}
+REMAP_CODE = '''a={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
-a=n[s]
-while(a in k){s++
-a=n[s]+n[e]
-e--}try{p[a]=p[n]
-k[a]=1}catch(e){}}}'''
-ARGS_CONDENSE_CODE = 'a=' + str(ARGS_INDICATORS).replace(' ', '') + '\nb=' + str(IDXS_INDICATORS).replace(' ', '') + '''
-e=''
-l(a,'(',')')
-d=e
-l(b,'[',']')
-function l(f,g,h){for(p=0;p<d.length;p++){c=d[p]
-z=f.indexOf(c.charCodeAt(0))
-if(z>-1){e+=g
+b=n[s]
+while(b in a){s++
+b=n[s]+n[e]
+e--}try{p[b]=p[n]
+a[b]=1}catch(e){}}}'''
+OUTPUT_PREFIX = 'a="function ";b="return ";c="delete ";d="while(";e="class ";f="else{";g="else ";h=document;i=window;j=Math;'
+ARGS_CONDENSE_CODE = 'b=' + str(ARGS_INDICATORS).replace(' ', '') + '\nc=' + str(IDXS_INDICATORS).replace(' ', '') + '''
+d=''
+k(b,'(',')')
+a=d
+k(c,'[',']')
+function k(e,f,g){for(p=0;p<a.length;p++){c=a[p]
+l=e.indexOf(c.charCodeAt(0))
+if(l>-1){d+=f
 p++
-for(i=0;i<z;i++){e+=d[p]
-if(i<z-1){e+=','
-p++}}e+=h}else e+=c}}'''
+for(i=0;i<l;i++){d+=a[p]
+if(i<l-1){d+=','
+p++}}d+=g}else d+=c}}'''
 REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
 # for name, newName in MEMBER_REMAP.items():
 # 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
@@ -58,12 +58,13 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'if', 'do', 'of', 'in']
 skipNodesAtPositions = []
 
 def WalkTree (node):
 	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName, globalVarsCntLeft, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
+	print(node.type, nodeTxt)
 	if node.parent:
 		siblings = node.parent.children
 		siblingIdx = siblings.index(node)
@@ -224,10 +225,10 @@ for arg in sys.argv:
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = OUTPUT_PREFIX + '\na=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\neval(e)'
+output = OUTPUT_PREFIX + 'a=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 jsBytes = Compress(outputPath)
-remappedOutput = OUTPUT_PREFIX + REMAP_CODE + '\na=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\neval(e)'
+remappedOutput = REMAP_CODE + OUTPUT_PREFIX + 'a=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(remappedOutput)
 remappedJsBytesLen = len(Compress(outputPath))
 if len(jsBytes) < remappedJsBytesLen:
