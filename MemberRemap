@@ -98,6 +98,8 @@ elementsFromPoint nP
 getElementsByName ey
 queryCommandState ra
 queryCommandValue eu
+validationMessage lg
+setCustomValidity Ci
 ariaAutoComplete a
 ariaBrailleLabel a
 ariaKeyShortcuts a
@@ -151,6 +153,7 @@ onanimationend nd
 createTextNode ao
 exitFullscreen xn
 getElementById tI
+reportValidity oi
 onbeforepaste o
 elementTiming e
 ariaMultiLine a
@@ -183,6 +186,7 @@ captureEvents rv
 createComment em
 createElement El
 releaseEvents sv
+checkValidity hy
 namespaceURI n
 assignedSlot a
 scrollHeight s
@@ -228,6 +232,8 @@ onslotchange sg
 ontimeupdate ia
 onpointerout pu
 getSelection Si
+defaultValue d
+willValidate ie
 scrollWidth s
 clientWidth c
 onbeforecut o
@@ -370,6 +376,7 @@ onsubmit si
 ontoggle tl
 evaluate ve
 hasFocus su
+validity ay
 tagName t
 animate ne
 closest lt
@@ -407,6 +414,7 @@ onpause ps
 onreset re
 onwheel nl
 onpaste sa
+htmlFor mo
 prefix p
 append pd
 before b
@@ -435,6 +443,7 @@ ondrop np
 onload nd
 onplay ny
 oncopy ny
+labels bl
 after a
 blink lk
 fixed id
@@ -452,6 +461,7 @@ fonts so
 clear lr
 close so
 write ti
+value lu
 slot s
 part p
 role r
@@ -470,6 +480,9 @@ with hi
 body oy
 head de
 open np
+form om
+name ea
+type ye
 big ig
 sub ub
 sup up

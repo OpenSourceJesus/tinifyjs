@@ -27,22 +27,27 @@ b=n[s]
 while(b in a){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
-a[b]=1}catch(e){}}}'''
-REMAP_CHARS = {1 : 'function ', 2 : 'return ', 3 : 'delete ', 4 : 'while(', 5 : 'class ', 6 : 'else{', 7 : 'else ', 8 : 'document', 9 : 'window', 11 : 'Math'}
-REMAP_CODE = 'a=' + str(REMAP_CHARS).replace(' ', '') + '''for(c of d){for([k,v] of a){a=a.replace(String.fromCharCode()(k),v)}}'''
-ARGS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
+a[b]=1}catch(e){}}}for(var n in document.body.style){var f=eval(function(a){this.style[`${n}`]=a})
+Element.prototype['$'+n[0]+n[n.length-1]]=f}'''
+REMAP_CHARS = {14 : 'function', 15 : 'return', 16 : 'delete', 17 : 'while(', 18 : 'class', 19 : 'else', 20 : 'this', 21 : 'document', 22 : 'window', 23 : 'Math', 24 : 'switch', 25 : 'case', 26 : 'exports'}
+REMAP_CODE = 'e=' + str(REMAP_CHARS).replace(' ', '') + '''
+for(c of d){for([k,v] of Object.entries(e))a=a.replace(String.fromCharCode(k),v+' ')}'''
+ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
 d=''
-for(p=0;p<a.length;p++){c=a[p]
-l=b.indexOf(c.charCodeAt(0))
+h(b,'(',')')
+a=d
+h(c,'[]',']')
+function h(e,f,g){for(p=0;p<a.length;p++){c=a[p]
+l=e.indexOf(c.charCodeAt(0))
 if(l>-1){d+=f
 p++
 for(i=0;i<l;i++){d+=a[p]
 if(i<l-1){d+=','
-p++}}d+=')'}else d+=c}'''
-REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
+p++}}d+=g}else d+=c}}'''
+REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE
 # for name, newName in MEMBER_REMAP.items():
-# 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
-OKAY_NAME_CHARS = list(string.ascii_letters + '$_')
+# 	REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
+OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['style', 'document', 'window', 'Math']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
@@ -68,45 +73,41 @@ def WalkTree (node):
 	if node.parent:
 		siblings = node.parent.children
 		siblingIdx = siblings.index(node)
-		nextSiblingType = None
+		nextSibling = None
 		if len(siblings) > siblingIdx + 1:
-			nextSiblingType = siblings[siblingIdx + 1].type
+			nextSibling = siblings[siblingIdx + 1]
 	if node.children == []:
 		mangleOrRemapResults = TryMangleOrRemapNode(node)
 		domRemappedNodeTxt = mangleOrRemapResults[0]
 		if mangleOrRemapResults[1]:
 			nodeTxt = domRemappedNodeTxt
+		elif nodeTxt == 'style':
+			parent2 = node.parent.parent
+			parentIdx = parent2.children.index(node.parent)
+			node2 = parent2.children[parentIdx + 1]
+			if node2.text == b'.':
+				node3 = parent2.children[parentIdx + 2]
+				node3Txt = node3.text.decode('utf-8')
+				skipNodesAtPositions.append(node.end_byte)
+				skipNodesAtPositions.append(node2.end_byte)
+				skipNodesAtPositions.append(node3.end_byte)
+				AddToOutputs ('$' + node3Txt[0] + node3Txt[-1])
+		else:
+			for charValue, name in REMAP_CHARS.items():
+				if nodeTxt == name:
+					nodeTxt = chr(charValue)
+					domRemappedNodeTxt = nodeTxt
+					break
 		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
 		elif node.type in ['let', 'var', 'const'] or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
 			nodeTxt = ''
 			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'function':
-			nodeTxt = chr(1)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'return':
-			nodeTxt = chr(2)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'delete':
-			nodeTxt = chr(3)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'while':
-			nodeTxt = chr(4)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'class':
-			nodeTxt = chr(5)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == 'else':
-			if nextSiblingType == '{':
-				nodeTxt = chr(6)
-			else:
-				nodeTxt = chr(7)
-			domRemappedNodeTxt = nodeTxt
-		elif node.type == '(':
+		elif node.type == '(' and nextSibling.type != 'binary_expression':
 			CondenseArgs (node, ARGS_INDCTRS)
-		# elif node.type == '[':
-		# 	CondenseArgs (node, IDXS_INDCTRS)
+		elif node.type == '[' and nextSibling.type != 'array':
+			CondenseArgs (node, IDXS_INDCTRS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			output += nodeTxt
 			domRemappedOutput += domRemappedNodeTxt
@@ -123,11 +124,11 @@ def WalkTree (node):
 					unusedNames[nodeTxt].remove(usedName)
 			usedNames[nodeTxt] = usedNames['']
 			mangledMembers[nodeTxt] = mangledMembers['']
-		if nextSiblingType and (isOfOrIn or node.type == 'new') and nextSiblingType not in ['{', 'array']:
+		if nextSibling and (isOfOrIn or node.type == 'new') and nextSibling.type not in ['{', 'array']:
 			AddToOutputs (' ')
 	for child in node.children:
 		WalkTree (child)
-	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and nextSiblingType != '}' and node.end_byte < len(txt) - 1:
+	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and (not nextSibling or nextSibling.type != '}') and node.end_byte < len(txt) - 1:
 		AddToOutputs (';')
 
 def AddToOutputs (add : str):
@@ -227,13 +228,13 @@ for arg in sys.argv:
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = 'a=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\n'+ REMAP_CODE + '\neval(d)'
+output = 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\n'+ REMAP_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 if compress:
 	jsBytes = Compress(outputPath)
 else:
 	jsBytes = output
-domRemappedOutput = DOM_REMAP_CODE + 'a=`' + domRemappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\n' + REMAP_CODE + '\neval(d)'
+domRemappedOutput = DOM_REMAP_CODE + 'a=`' + domRemappedOutput + '`\n' + REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + '\neval(d)'
 open(outputPath, 'w').write(domRemappedOutput)
 if compress:
 	remappedJsBytesLen = len(Compress(outputPath))
