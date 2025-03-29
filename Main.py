@@ -3,22 +3,23 @@ from tree_sitter import Language, Parser
 
 JS_LANG = Language(tsjs.language())
 PARSER = Parser(JS_LANG)
-TEXT_INDICATOR = '-t='
-INPUT_INDICATOR = '-i='
-OUTPUT_INDICATOR = '-o='
-ARGS_INDICATORS = []
+TEXT_INDCTR = '-t='
+INPUT_INDCTR = '-i='
+OUTPUT_INDCTR = '-o='
+DONT_COMPRESS_INDCTR = '-n'
+ARGS_INDCTRS = []
 for i in range(1, 11):
-	ARGS_INDICATORS.append(i)
-IDXS_INDICATORS = [0]
+	ARGS_INDCTRS.append(i)
+IDXS_INDCTRS = [0]
 for i in range(11, 14):
-	IDXS_INDICATORS.append(i)
+	IDXS_INDCTRS.append(i)
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
 _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-REMAP_CODE = '''a={}
+DOM_REMAP_CODE = '''a={}
 for(o of [Element,Node,String,Array,Document,Window]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
@@ -27,19 +28,17 @@ while(b in a){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
 a[b]=1}catch(e){}}}'''
-OUTPUT_PREFIX = 'a="function ";b="return ";c="delete ";d="while(";e="class ";f="else{";g="else ";h=document;i=window;j=Math;'
-ARGS_CONDENSE_CODE = 'b=' + str(ARGS_INDICATORS).replace(' ', '') + '\nc=' + str(IDXS_INDICATORS).replace(' ', '') + '''
+REMAP_CHARS = {1 : 'function ', 2 : 'return ', 3 : 'delete ', 4 : 'while(', 5 : 'class ', 6 : 'else{', 7 : 'else ', 8 : 'document', 9 : 'window', 11 : 'Math'}
+REMAP_CODE = 'a=' + str(REMAP_CHARS).replace(' ', '') + '''for(c of d){for([k,v] of a){a=a.replace(String.fromCharCode()(k),v)}}'''
+ARGS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
 d=''
-k(b,'(',')')
-a=d
-k(c,'[',']')
-function k(e,f,g){for(p=0;p<a.length;p++){c=a[p]
-l=e.indexOf(c.charCodeAt(0))
+for(p=0;p<a.length;p++){c=a[p]
+l=b.indexOf(c.charCodeAt(0))
 if(l>-1){d+=f
 p++
 for(i=0;i<l;i++){d+=a[p]
 if(i<l-1){d+=','
-p++}}d+=g}else d+=c}}'''
+p++}}d+=')'}else d+=c}'''
 REMAPPED_ARGS_CONDENSE_CODE = ARGS_CONDENSE_CODE
 # for name, newName in MEMBER_REMAP.items():
 # 	REMAPPED_ARGS_CONDENSE_CODE = REMAPPED_ARGS_CONDENSE_CODE.replace(name, newName)
@@ -48,7 +47,7 @@ JS_NAMES = ['style', 'document', 'window', 'Math']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
-remappedOutput = ''
+domRemappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
 currentFuncName = ''
 currentFunc = None
@@ -58,11 +57,12 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'if', 'do', 'of', 'in']
+usedNames[currentFuncName] = ['if', 'do', 'of', 'in']
 skipNodesAtPositions = []
+compress = True
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, unusedNames, mangledMembers, remappedOutput, currentFuncName, globalVarsCntLeft, skipNodesAtPositions
+	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, domRemappedOutput, currentFuncName, globalVarsCntLeft, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
@@ -73,43 +73,43 @@ def WalkTree (node):
 			nextSiblingType = siblings[siblingIdx + 1].type
 	if node.children == []:
 		mangleOrRemapResults = TryMangleOrRemapNode(node)
-		remappedNodeTxt = mangleOrRemapResults[0]
+		domRemappedNodeTxt = mangleOrRemapResults[0]
 		if mangleOrRemapResults[1]:
-			nodeTxt = remappedNodeTxt
+			nodeTxt = domRemappedNodeTxt
 		isOfOrIn = node.type in ['of', 'in']
 		if isOfOrIn:
 			AddToOutputs (' ')
 		elif node.type in ['let', 'var', 'const'] or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
 			nodeTxt = ''
-			remappedNodeTxt = nodeTxt
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'function':
-			nodeTxt = '${a}'
-			remappedNodeTxt = nodeTxt
+			nodeTxt = chr(1)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'return':
-			nodeTxt = '${b}'
-			remappedNodeTxt = nodeTxt
+			nodeTxt = chr(2)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'delete':
-			nodeTxt = '${c}'
-			remappedNodeTxt = nodeTxt
+			nodeTxt = chr(3)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'while':
-			nodeTxt = '${d}'
-			remappedNodeTxt = nodeTxt
+			nodeTxt = chr(4)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'class':
-			nodeTxt = '${e}'
-			remappedNodeTxt = nodeTxt
+			nodeTxt = chr(5)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == 'else':
 			if nextSiblingType == '{':
-				nodeTxt = '${f}'
+				nodeTxt = chr(6)
 			else:
-				nodeTxt = '${g}'
-			remappedNodeTxt = nodeTxt
+				nodeTxt = chr(7)
+			domRemappedNodeTxt = nodeTxt
 		elif node.type == '(':
-			CondenseArgs (node, ARGS_INDICATORS)
-		elif node.type == '[':
-			CondenseArgs (node, IDXS_INDICATORS)
+			CondenseArgs (node, ARGS_INDCTRS)
+		# elif node.type == '[':
+		# 	CondenseArgs (node, IDXS_INDCTRS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			output += nodeTxt
-			remappedOutput += remappedNodeTxt
+			domRemappedOutput += domRemappedNodeTxt
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			currentFuncName = ''
 			currentFunc = None
@@ -130,40 +130,20 @@ def WalkTree (node):
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and nextSiblingType != '}' and node.end_byte < len(txt) - 1:
 		AddToOutputs (';')
 
-def CondenseArgs (node, argsCntsIndicatorsVals : list):
-	global skipNodesAtPositions
-	siblings = node.parent.children
-	argCnt = 0
-	for sibling in siblings[1 : -1]:
-		if sibling.type != ',':
-			argCnt += 1
-			if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
-				argCnt = 0
-				skipNodesAtPositions = []
-				break
-		else:
-			skipNodesAtPositions.append(sibling.end_byte)
-	if argCnt > 0 and argCnt < len(argsCntsIndicatorsVals):
-		nodeTxt = ''
-		remappedNodeTxt = ''
-		AddToOutputs (chr(argsCntsIndicatorsVals[argCnt]))
-		skipNodesAtPositions.append(node.end_byte)
-		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
-
 def AddToOutputs (add : str):
-	global output, remappedOutput
+	global output, domRemappedOutput
 	output += add
-	remappedOutput += add
+	domRemappedOutput += add
 
 def TryMangleOrRemapNode (node) -> (str, None):
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == 'identifier':
 		if nodeTxt == 'document':
-			return ('h', True)
+			return (chr(8), True)
 		elif nodeTxt == 'window':
-			return ('i', True)
+			return (chr(9), True)
 		elif nodeTxt == 'Math':
-			return ('j', True)
+			return (chr(11), True)
 		return (TryMangleNode(node), True)
 	elif node.type == 'property_identifier':
 		if nodeTxt in MEMBER_REMAP:
@@ -200,6 +180,26 @@ def TryMangleNode (node) -> str:
 		usedNames[currentFuncName].append(nodeTxt)
 	return nodeTxt
 
+def CondenseArgs (node, argsCntsIndctrsVals : list):
+	global skipNodesAtPositions
+	siblings = node.parent.children
+	argCnt = 0
+	for sibling in siblings[1 : -1]:
+		if sibling.type != ',':
+			argCnt += 1
+			if sibling.children != [] or len(TryMangleNode(sibling)) > 1:
+				argCnt = 0
+				skipNodesAtPositions = []
+				break
+		else:
+			skipNodesAtPositions.append(sibling.end_byte)
+	if argCnt >= 0 and argCnt < len(argsCntsIndctrsVals):
+		nodeTxt = ''
+		domRemappedNodeTxt = ''
+		AddToOutputs (chr(argsCntsIndctrsVals[argCnt]))
+		skipNodesAtPositions.append(node.end_byte)
+		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
+
 def AtEndOfHierarchy (root, node) -> bool:
 	while True:
 		if root.children == []:
@@ -215,25 +215,34 @@ def Compress (filePath : str) -> str:
 	return open(filePath + '.gz', 'rb').read()
 
 for arg in sys.argv:
-	if arg.startswith(TEXT_INDICATOR):
-		txt += arg[len(TEXT_INDICATOR) :]
-	elif arg.startswith(INPUT_INDICATOR):
-		txt += open(arg[len(INPUT_INDICATOR) :], 'r').read()
-	elif arg.startswith(OUTPUT_INDICATOR):
-		outputPath = arg[len(OUTPUT_INDICATOR) :]
+	if arg.startswith(TEXT_INDCTR):
+		txt += arg[len(TEXT_INDCTR) :]
+	elif arg.startswith(INPUT_INDCTR):
+		txt += open(arg[len(INPUT_INDCTR) :], 'r').read()
+	elif arg.startswith(OUTPUT_INDCTR):
+		outputPath = arg[len(OUTPUT_INDCTR) :]
+	elif arg == DONT_COMPRESS_INDCTR:
+		compress = False
 
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTree (tree.root_node)
-output = OUTPUT_PREFIX + 'a=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\neval(d)'
+output = 'a=`' + output + '`\n' + ARGS_CONDENSE_CODE + '\n'+ REMAP_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
-jsBytes = Compress(outputPath)
-remappedOutput = REMAP_CODE + OUTPUT_PREFIX + 'a=`' + remappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\neval(d)'
-open(outputPath, 'w').write(remappedOutput)
-remappedJsBytesLen = len(Compress(outputPath))
+if compress:
+	jsBytes = Compress(outputPath)
+else:
+	jsBytes = output
+domRemappedOutput = DOM_REMAP_CODE + 'a=`' + domRemappedOutput + '`\n' + REMAPPED_ARGS_CONDENSE_CODE + '\n' + REMAP_CODE + '\neval(d)'
+open(outputPath, 'w').write(domRemappedOutput)
+if compress:
+	remappedJsBytesLen = len(Compress(outputPath))
+else:
+	remappedJsBytesLen = len(domRemappedOutput)
 if len(jsBytes) < remappedJsBytesLen:
 	print(output)
 	open(outputPath, 'w').write(output)
-	open(outputPath + '.gz', 'wb').write(jsBytes)
+	if compress:
+		open(outputPath + '.gz', 'wb').write(jsBytes)
 else:
-	print(remappedOutput)
+	print(domRemappedOutput)

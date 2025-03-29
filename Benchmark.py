@@ -1,27 +1,53 @@
-import sys, requests, subprocess
-from Main import *
+import sys, time, requests, subprocess, matplotlib.pyplot as plot
 
-results = {}
+def GenPlot (dict_ : {}):
+	spacing = .1
+	currentXLoc = spacing / 2
+	xLocs = []
+	width = 1 / len(dict_) - spacing
+	for i in range(len(dict_)):
+		currentXLoc += width + spacing / len(dict_)
+		xLocs.append(currentXLoc)
+	plot.bar(x = xLocs, height = dict_.values(), width = width, tick_label = dict_.keys(), color = ['black', 'red', 'green', 'blue', 'yellow', 'purple', 'orange'])
+	plot.show()
+
+timeResults = {}
+sizeResults = {}
 inputPath = '/tmp/tinifyjs Benchmark Input.js'
+time_ = time.perf_counter()
+from Main import *
+timeResults['tinifyjs'] = time.perf_counter() - time_
 open(inputPath, 'w').write(txt)
-results['tinifyjs'] = len(open(outputPath + '.gz', 'rb').read())
+sizeResults['tinifyjs'] = len(open(outputPath + '.gz', 'rb').read())
 outputPathPrefix = '/tmp/tinifyjs Benchmark Output'
+time_ = time.perf_counter()
 js = subprocess.run(['uglifyjs', inputPath, '-m'], capture_output = True).stdout
+timeResults['uglifyjs'] = time.perf_counter() - time_
 outputPath = outputPathPrefix + '_uglifyjs.js'
 open(outputPath, 'wb').write(js)
-results['uglifyjs'] = len(Compress(outputPath))
+sizeResults['uglifyjs'] = len(Compress(outputPath))
 outputPath = outputPathPrefix + '_roadroller.js'
+time_ = time.perf_counter()
 subprocess.run(['npx', 'roadroller', inputPath, '-o', outputPath])
-results['roadroller'] = len(Compress(outputPath))
+timeResults['roadroller'] = time.perf_counter() - time_
+sizeResults['roadroller'] = len(Compress(outputPath))
+time_ = time.perf_counter()
 js = subprocess.run(['terser', inputPath, '--compress', '--m', '--mangle-props'], capture_output = True).stdout
+timeResults['terser'] = time.perf_counter() - time_
 outputPath = outputPathPrefix + '_terser.js'
 open(outputPath, 'wb').write(js)
-results['terser'] = len(Compress(outputPath))
+sizeResults['terser'] = len(Compress(outputPath))
 outputPath = outputPathPrefix + '_closure.js'
+time_ = time.perf_counter()
 subprocess.run(['npx', 'google-closure-compiler', '--js=' + inputPath, '--js_output_file=' + outputPath])
-results['closure'] = len(Compress(outputPath))
-response = requests.post('https://www.toptal.com/developers/javascript-minifier/api/raw', data = dict(input = js)).text
+timeResults['closure'] = time.perf_counter() - time_
+sizeResults['closure'] = len(Compress(outputPath))
 outputPath = outputPathPrefix + '_javascript-minifier.js'
+time_ = time.perf_counter()
+response = requests.post('https://www.toptal.com/developers/javascript-minifier/api/raw', data = dict(input = js)).text
+timeResults['javascript-minifier'] = time.perf_counter() - time_
 open(outputPath, 'w').write('{}'.format(response))
-results['javascript-minifier'] = len(Compress(outputPath))
-print(results)
+sizeResults['javascript-minifier'] = len(Compress(outputPath))
+
+GenPlot (sizeResults)
+GenPlot (timeResults)
