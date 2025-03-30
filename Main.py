@@ -35,10 +35,10 @@ REMAP_CODE = 'e=' + str(REMAP_CHARS).replace(' ', '') + '''
 for(c of d){for([k,v] of Object.entries(e))a=a.replace(String.fromCharCode(k),v+' ')}'''
 ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
 d=''
-h(b,'(',')')
+$(b,'(',')')
 a=d
-h(c,'[',']')
-function h(e,f,g){for(p=0;p<a.length;p++){c=a[p]
+$(c,'[',']')
+function $(e,f,g){for(p=0;p<a.length;p++){c=a[p]
 l=e.indexOf(c.charCodeAt(0))
 if(l>-1){d+=f
 p++
@@ -46,10 +46,10 @@ for(i=0;i<l;i++){d+=a[p]
 if(i<l-1){d+=','
 p++}}d+=g}else d+=c}}'''
 REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE
-# for name, newName in MEMBER_REMAP.items():
-# 	REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
+for name, newName in MEMBER_REMAP.items():
+	REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
-JS_NAMES = ['style', 'document', 'window', 'Math']
+JS_NAMES = ['style', 'document', 'window', 'Math', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -57,19 +57,23 @@ domRemappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
 currentFuncName = ''
 currentFunc = None
+currentFuncTxt = ''
+domRemappedCurrentFuncTxt = ''
+currentFuncVarsNames = []
 unusedNames = {}
 unusedNames[currentFuncName] = []
 unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['if', 'do', 'of', 'in']
+usedNames[currentFuncName] = []
+usedNames[currentFuncName].extend(['$'])
 skipNodesAtPositions = []
 compress = True
 debug = False
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, domRemappedOutput, currentFuncName, globalVarsCntLeft, skipNodesAtPositions
+	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, domRemappedOutput, globalVarsCntLeft, currentFuncVarsNames, skipNodesAtPositions, domRemappedCurrentFuncTxt
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
@@ -105,21 +109,44 @@ def WalkTree (node):
 						domRemappedNodeTxt = nodeTxt
 					break
 		isOfOrIn = node.type in ['of', 'in']
+		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
 			AddToOutputs (' ')
-		elif node.type in ['let', 'var', 'const'] or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
+		elif inVarDeclrn or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
+			if inVarDeclrn and currentFunc:
+				varName = TryMangleNode(nextSibling)
+				if varName not in currentFuncVarsNames:
+					currentFuncVarsNames.append(varName)
 			nodeTxt = ''
 			domRemappedNodeTxt = nodeTxt
-		elif node.type == '(' and nextSibling.type != 'binary_expression' and not debug:
-			CondenseArgs (node, ARGS_INDCTRS)
-		elif node.type == '[' and nextSibling.type != 'array' and not debug:
-			CondenseArgs (node, IDXS_INDCTRS)
+		elif not debug:
+			if node.type == '(' and nextSibling.type != 'binary_expression':
+				CondenseArgs (node, ARGS_INDCTRS)
+			elif node.type == '[' and nextSibling.type != 'array':
+				CondenseArgs (node, IDXS_INDCTRS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
-			output += nodeTxt
-			domRemappedOutput += domRemappedNodeTxt
+			if currentFunc:
+				currentFuncTxt += nodeTxt
+				domRemappedCurrentFuncTxt += domRemappedNodeTxt
+			else:
+				output += nodeTxt
+				domRemappedOutput += domRemappedNodeTxt
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
+			funcBodyPrefix = ''
+			for varName in currentFuncVarsNames:
+				funcBodyPrefix += varName + ','
+			if funcBodyPrefix != '':
+				funcBodyPrefix = 'var ' + funcBodyPrefix[: -1] + ';'
+			funcBodyStartIdx = currentFuncTxt.find('{') + 1
+			output += currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :]
+			funcBodyStartIdx = domRemappedCurrentFuncTxt.find('{') + 1
+			domRemappedOutput += domRemappedCurrentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + domRemappedCurrentFuncTxt[funcBodyStartIdx :]
+			print('YAY', funcBodyPrefix, currentFuncTxt)
 			currentFuncName = ''
 			currentFunc = None
+			currentFuncTxt = ''
+			currentFuncVarsNames = []
+			domRemappedCurrentFuncTxt = ''
 		elif (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeTxt
 			currentFunc = node.parent
@@ -128,7 +155,8 @@ def WalkTree (node):
 			for usedName in usedNames['']:
 				if usedName in unusedNames[nodeTxt]:
 					unusedNames[nodeTxt].remove(usedName)
-			usedNames[nodeTxt] = usedNames['']
+			usedNames[nodeTxt] = []
+			usedNames[nodeTxt].extend(usedNames[''])
 			mangledMembers[nodeTxt] = mangledMembers['']
 		if nextSibling and (isOfOrIn or node.type == 'new') and nextSibling.type not in ['{', 'array']:
 			AddToOutputs (' ')
@@ -138,9 +166,13 @@ def WalkTree (node):
 		AddToOutputs (';')
 
 def AddToOutputs (add : str):
-	global output, domRemappedOutput
-	output += add
-	domRemappedOutput += add
+	global output, currentFuncTxt, domRemappedOutput, domRemappedCurrentFuncTxt
+	if currentFunc:
+		currentFuncTxt += add
+		domRemappedCurrentFuncTxt += add
+	else:
+		output += add
+		domRemappedOutput += add
 
 def TryMangleOrRemapNode (node) -> (str, None):
 	nodeTxt = node.text.decode('utf-8')
@@ -176,7 +208,7 @@ def TryMangleNode (node) -> str:
 			usedNames_ = usedNames[currentFuncName]
 			while unusedNames[currentFuncName] == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in list(MEMBER_REMAP.values()) + list(mangledMembers_.keys()) + usedNames_:
+				if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
 					unusedNames[currentFuncName].append(unusedName)
 			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
 			if mangledMembers[currentFuncName][nodeTxt] not in usedNames_:
