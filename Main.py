@@ -90,14 +90,15 @@ def WalkTree (node):
 		elif nodeTxt == 'style':
 			parent2 = node.parent.parent
 			parentIdx = parent2.children.index(node.parent)
-			node2 = parent2.children[parentIdx + 1]
-			if node2.text == b'.':
-				node3 = parent2.children[parentIdx + 2]
-				node3Txt = node3.text.decode('utf-8')
-				skipNodesAtPositions.append(node.end_byte)
-				skipNodesAtPositions.append(node2.end_byte)
-				skipNodesAtPositions.append(node3.end_byte)
-				AddToOutputs ('$' + node3Txt[0] + node3Txt[-1])
+			if len(parent2.children) > parentIdx + 1:
+				node2 = parent2.children[parentIdx + 1]
+				if node2.text == b'.':
+					node3 = parent2.children[parentIdx + 2]
+					node3Txt = node3.text.decode('utf-8')
+					skipNodesAtPositions.append(node.end_byte)
+					skipNodesAtPositions.append(node2.end_byte)
+					skipNodesAtPositions.append(node3.end_byte)
+					AddToOutputs ('$' + node3Txt[0] + node3Txt[-1])
 		else:
 			for charValue, name in REMAP_CHARS.items():
 				if nodeTxt == name:
@@ -141,7 +142,6 @@ def WalkTree (node):
 			output += currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :]
 			funcBodyStartIdx = domRemappedCurrentFuncTxt.find('{') + 1
 			domRemappedOutput += domRemappedCurrentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + domRemappedCurrentFuncTxt[funcBodyStartIdx :]
-			print('YAY', funcBodyPrefix, currentFuncTxt)
 			currentFuncName = ''
 			currentFunc = None
 			currentFuncTxt = ''
