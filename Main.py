@@ -37,6 +37,7 @@ ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').repla
 d=''
 $(b,'(',')')
 a=d
+d=''
 $(c,'[',']')
 function $(e,f,g){for(p=0;p<a.length;p++){c=a[p]
 l=e.indexOf(c.charCodeAt(0))
@@ -53,12 +54,10 @@ JS_NAMES = ['style', 'document', 'window', 'Math', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
-domRemappedOutput = ''
 outputPath = '/tmp/tinifyjs Output.js'
 currentFuncName = ''
 currentFunc = None
 currentFuncTxt = ''
-domRemappedCurrentFuncTxt = ''
 currentFuncVarsNames = []
 unusedNames = {}
 unusedNames[currentFuncName] = []
@@ -73,7 +72,7 @@ compress = True
 debug = False
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, domRemappedOutput, globalVarsCntLeft, currentFuncVarsNames, skipNodesAtPositions, domRemappedCurrentFuncTxt
+	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, globalVarsCntLeft, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
@@ -83,11 +82,8 @@ def WalkTree (node):
 		if len(siblings) > siblingIdx + 1:
 			nextSibling = siblings[siblingIdx + 1]
 	if node.children == []:
-		mangleOrRemapResults = TryMangleOrRemapNode(node)
-		domRemappedNodeTxt = mangleOrRemapResults[0]
-		if mangleOrRemapResults[1]:
-			nodeTxt = domRemappedNodeTxt
-		elif nodeTxt == 'style':
+		nodeTxt = TryMangleOrRemapNode(node)
+		if nodeTxt == 'style':
 			parent2 = node.parent.parent
 			parentIdx = parent2.children.index(node.parent)
 			if len(parent2.children) > parentIdx + 1:
@@ -98,28 +94,25 @@ def WalkTree (node):
 					skipNodesAtPositions.append(node.end_byte)
 					skipNodesAtPositions.append(node2.end_byte)
 					skipNodesAtPositions.append(node3.end_byte)
-					AddToOutputs ('$' + node3Txt[0] + node3Txt[-1])
+					AddToOutput ('$' + node3Txt[0] + node3Txt[-1])
 		else:
 			for charValue, name in REMAP_CHARS.items():
 				if nodeTxt == name:
 					if debug:
 						nodeTxt += ' '
-						domRemappedNodeTxt = nodeTxt
 					else:
 						nodeTxt = chr(charValue)
-						domRemappedNodeTxt = nodeTxt
 					break
 		isOfOrIn = node.type in ['of', 'in']
 		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
-			AddToOutputs (' ')
+			AddToOutput (' ')
 		elif inVarDeclrn or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
 			if inVarDeclrn and currentFunc:
 				varName = TryMangleNode(nextSibling)
 				if varName not in currentFuncVarsNames:
 					currentFuncVarsNames.append(varName)
 			nodeTxt = ''
-			domRemappedNodeTxt = nodeTxt
 		elif not debug:
 			if node.type == '(' and nextSibling.type != 'binary_expression':
 				CondenseArgs (node, ARGS_INDCTRS)
@@ -128,10 +121,8 @@ def WalkTree (node):
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
 			if currentFunc:
 				currentFuncTxt += nodeTxt
-				domRemappedCurrentFuncTxt += domRemappedNodeTxt
 			else:
 				output += nodeTxt
-				domRemappedOutput += domRemappedNodeTxt
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			funcBodyPrefix = ''
 			for varName in currentFuncVarsNames:
@@ -140,13 +131,10 @@ def WalkTree (node):
 				funcBodyPrefix = 'var ' + funcBodyPrefix[: -1] + ';'
 			funcBodyStartIdx = currentFuncTxt.find('{') + 1
 			output += currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :]
-			funcBodyStartIdx = domRemappedCurrentFuncTxt.find('{') + 1
-			domRemappedOutput += domRemappedCurrentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + domRemappedCurrentFuncTxt[funcBodyStartIdx :]
 			currentFuncName = ''
 			currentFunc = None
 			currentFuncTxt = ''
 			currentFuncVarsNames = []
-			domRemappedCurrentFuncTxt = ''
 		elif (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeTxt
 			currentFunc = node.parent
@@ -159,44 +147,42 @@ def WalkTree (node):
 			usedNames[nodeTxt].extend(usedNames[''])
 			mangledMembers[nodeTxt] = mangledMembers['']
 		if nextSibling and (isOfOrIn or node.type == 'new') and nextSibling.type not in ['{', 'array']:
-			AddToOutputs (' ')
+			AddToOutput (' ')
 	for child in node.children:
 		WalkTree (child)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and (not nextSibling or nextSibling.type != '}') and node.end_byte < len(txt) - 1:
-		AddToOutputs (';')
+		AddToOutput (';')
 
-def AddToOutputs (add : str):
-	global output, currentFuncTxt, domRemappedOutput, domRemappedCurrentFuncTxt
+def AddToOutput (add : str):
+	global output, currentFuncTxt
 	if currentFunc:
 		currentFuncTxt += add
-		domRemappedCurrentFuncTxt += add
 	else:
 		output += add
-		domRemappedOutput += add
 
-def TryMangleOrRemapNode (node) -> (str, None):
+def TryMangleOrRemapNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == 'identifier':
 		if not debug:
 			if nodeTxt == 'document':
-				return (chr(8), True)
+				return chr(8)
 			elif nodeTxt == 'window':
-				return (chr(9), True)
+				return chr(9)
 			elif nodeTxt == 'Math':
-				return (chr(11), True)
-		return (TryMangleNode(node), True)
+				return chr(11)
+		return TryMangleNode(node)
 	elif node.type == 'property_identifier':
 		if nodeTxt in MEMBER_REMAP:
-			return (MEMBER_REMAP[nodeTxt], False)
+			return MEMBER_REMAP[nodeTxt]
 		else:
 			parentNodeTxt = node.parent.text.decode('utf-8')
 			if node.parent.type == 'method_definition' and parentNodeTxt not in usedNames[currentFuncName] + JS_NAMES:
-				return (TryMangleNode(node), True)
+				return TryMangleNode(node)
 			else:
 				siblingIdx = node.parent.children.index(node)
 				if siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
-					return (TryMangleNode(node), True)
-	return (nodeTxt, None)
+					return TryMangleNode(node)
+	return nodeTxt
 
 def TryMangleNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
@@ -236,7 +222,7 @@ def CondenseArgs (node, argsCntsIndctrsVals : list):
 	if argCnt >= 0 and argCnt < len(argsCntsIndctrsVals):
 		nodeTxt = ''
 		domRemappedNodeTxt = nodeTxt
-		AddToOutputs (chr(argsCntsIndctrsVals[argCnt]))
+		AddToOutput (chr(argsCntsIndctrsVals[argCnt]))
 		skipNodesAtPositions.append(node.end_byte)
 		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
 
@@ -276,22 +262,7 @@ if debug:
 	outputPrefix = ''
 	outputSuffix = ''
 	evalCode = ''
-output = outputPrefix + output + outputSuffix + '\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\n'+ REMAP_CODE + evalCode
+output = DOM_REMAP_CODE + outputPrefix + output + outputSuffix + '\n' + REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + evalCode
 open(outputPath, 'w').write(output)
 if compress:
-	jsBytes = Compress(outputPath)
-else:
-	jsBytes = output
-domRemappedOutput = DOM_REMAP_CODE + outputPrefix + domRemappedOutput + outputSuffix + '\n' + REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + evalCode
-open(outputPath, 'w').write(domRemappedOutput)
-if compress:
-	remappedJsBytesLen = len(Compress(outputPath))
-else:
-	remappedJsBytesLen = len(domRemappedOutput)
-if len(jsBytes) < remappedJsBytesLen:
-	print(output)
-	open(outputPath, 'w').write(output)
-	if compress:
-		open(outputPath + '.gz', 'wb').write(jsBytes)
-else:
-	print(domRemappedOutput)
+	Compress (outputPath)
