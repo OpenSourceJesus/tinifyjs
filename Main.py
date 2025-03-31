@@ -28,9 +28,10 @@ b=n[s]
 while(b in a){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
-a[b]=1}catch(e){}}}for(var n in document.body.style){var f=eval(function(a){this.style[`${n}`]=a})
+a[b]=1}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`${n}`]=a})
 Element.prototype['$'+n[0]+n[n.length-1]]=f}'''
-REMAP_CHARS = {14 : 'function', 15 : 'return', 16 : 'delete', 17 : 'while', 18 : 'class', 19 : 'else', 20 : 'this', 21 : 'document', 22 : 'window', 23 : 'Math', 24 : 'switch', 25 : 'case', 26 : 'exports'}
+VAR_REPLACE_CHAR_VAL = 27
+REMAP_CHARS = {14 : 'function', 15 : 'return', 16 : 'delete', 17 : 'while', 18 : 'class', 19 : 'else', 20 : 'this', 21 : 'document', 22 : 'window', 23 : 'Math', 24 : 'switch', 25 : 'case', 26 : 'exports', VAR_REPLACE_CHAR_VAL : 'var'}
 REMAP_CODE = 'e=' + str(REMAP_CHARS).replace(' ', '') + '''
 for(c of d){for([k,v] of Object.entries(e))a=a.replace(String.fromCharCode(k),v+' ')}'''
 ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
@@ -46,9 +47,8 @@ p++
 for(i=0;i<l;i++){d+=a[p]
 if(i<l-1){d+=','
 p++}}d+=g}else d+=c}}'''
-REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE
-for name, newName in MEMBER_REMAP.items():
-	REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE = REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
+# for name, newName in MEMBER_REMAP.items():
+# 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
 OKAY_NAME_CHARS = list(string.ascii_letters + '_')
 JS_NAMES = ['style', 'document', 'window', 'Math', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
@@ -65,14 +65,13 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = []
-usedNames[currentFuncName].extend(['$'])
+usedNames[currentFuncName] = ['$']
 skipNodesAtPositions = []
 compress = True
 debug = False
 
 def WalkTree (node):
-	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, globalVarsCntLeft, currentFuncVarsNames, skipNodesAtPositions
+	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.parent:
@@ -119,16 +118,13 @@ def WalkTree (node):
 			elif node.type == '[' and nextSibling.type != 'array':
 				CondenseArgs (node, IDXS_INDCTRS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
-			if currentFunc:
-				currentFuncTxt += nodeTxt
-			else:
-				output += nodeTxt
+			AddToOutput (nodeTxt)
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			funcBodyPrefix = ''
 			for varName in currentFuncVarsNames:
 				funcBodyPrefix += varName + ','
 			if funcBodyPrefix != '':
-				funcBodyPrefix = 'var ' + funcBodyPrefix[: -1] + ';'
+				funcBodyPrefix = chr(VAR_REPLACE_CHAR_VAL) + funcBodyPrefix[: -1] + ';'
 			funcBodyStartIdx = currentFuncTxt.find('{') + 1
 			output += currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :]
 			currentFuncName = ''
@@ -192,10 +188,11 @@ def TryMangleNode (node) -> str:
 		mangledMembers_ = mangledMembers[currentFuncName]
 		if nodeTxt not in mangledMembers_:
 			usedNames_ = usedNames[currentFuncName]
-			while unusedNames[currentFuncName] == []:
+			while not currentFunc or unusedNames[currentFuncName] == []:
 				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
 				if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
 					unusedNames[currentFuncName].append(unusedName)
+					break
 			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
 			if mangledMembers[currentFuncName][nodeTxt] not in usedNames_:
 				mangledMember = mangledMembers[currentFuncName][nodeTxt]
@@ -221,7 +218,6 @@ def CondenseArgs (node, argsCntsIndctrsVals : list):
 			skipNodesAtPositions.append(sibling.end_byte)
 	if argCnt >= 0 and argCnt < len(argsCntsIndctrsVals):
 		nodeTxt = ''
-		domRemappedNodeTxt = nodeTxt
 		AddToOutput (chr(argsCntsIndctrsVals[argCnt]))
 		skipNodesAtPositions.append(node.end_byte)
 		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
@@ -262,7 +258,7 @@ if debug:
 	outputPrefix = ''
 	outputSuffix = ''
 	evalCode = ''
-output = DOM_REMAP_CODE + outputPrefix + output + outputSuffix + '\n' + REMAPPED_ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + evalCode
+output = DOM_REMAP_CODE + outputPrefix + output + outputSuffix + '\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + evalCode
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
