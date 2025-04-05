@@ -9,10 +9,11 @@ OUTPUT_INDCTR = '-o='
 DONT_COMPRESS_INDCTR = '-n'
 DEBUG_INDCTR = '-d'
 ARGS_INDCTRS = []
-for i in range(1, 11):
+for i in range(1, 10):
 	ARGS_INDCTRS.append(i)
-IDXS_INDCTRS = [0]
-for i in range(11, 14):
+ARGS_INDCTRS.append(11)
+IDXS_INDCTRS = [12]
+for i in range(14, 17):
 	IDXS_INDCTRS.append(i)
 MEMBER_REMAP = {}
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
@@ -28,28 +29,29 @@ b=n[s]
 while(b in a){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
-a[b]=1}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`${n}`]=a})
-Element.prototype['$'+n[0]+n[n.length-1]]=f}'''
+a[b]=1}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 VAR_REPLACE_CHAR_VAL = 27
-REMAP_CHARS = {14 : 'function', 15 : 'return', 16 : 'delete', 17 : 'while', 18 : 'class', 19 : 'else', 20 : 'this', 21 : 'document', 22 : 'window', 23 : 'Math', 24 : 'switch', 25 : 'case', 26 : 'exports', VAR_REPLACE_CHAR_VAL : 'var'}
+WINDOW_REPLACE_CHAR_VAL = 26
+REMAP_CHARS = {17 : 'function', 18 : 'return', 19 : 'while', 20 : 'else', 21 : 'this', 22 : 'document', 23 : 'Math', 24 : 'case', 25 : 'for', VAR_REPLACE_CHAR_VAL : 'var', WINDOW_REPLACE_CHAR_VAL : 'window'}
 REMAP_CODE = 'e=' + str(REMAP_CHARS).replace(' ', '') + '''
-for(c of d){for([k,v] of Object.entries(e))a=a.replace(String.fromCharCode(k),v+' ')}'''
+for([k,v]of Object.entries(e))d=d.replaceAll(String.fromCharCode(k),v+' ')'''
 ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
 d=''
-$(b,'(',')')
+CA(b,'(',')')
 a=d
 d=''
-$(c,'[',']')
-function $(e,f,g){for(p=0;p<a.length;p++){c=a[p]
+CA(c,'[',']')
+function CA(e,f,g){for(p=0;p<a.length;p++){c=a[p]
 l=e.indexOf(c.charCodeAt(0))
 if(l>-1){d+=f
 p++
-for(i=0;i<l;i++){d+=a[p]
-if(i<l-1){d+=','
+for(i=0;i<=l;i++){d+=a[p]
+if(i<l){d+=','
 p++}}d+=g}else d+=c}}'''
 # for name, newName in MEMBER_REMAP.items():
 # 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
-OKAY_NAME_CHARS = list(string.ascii_letters + '_')
+OKAY_NAME_CHARS = list(string.ascii_letters)
 JS_NAMES = ['style', 'document', 'window', 'Math', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
@@ -65,12 +67,40 @@ unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
 usedNames = {}
-usedNames[currentFuncName] = ['$']
+usedNames[currentFuncName] = ['_', '$', 'CA']
 skipNodesAtPositions = []
+varsCnts = {}
+funcsCnts = {}
+maxLocalVarsCnt = 0
 compress = True
 debug = False
 
-def WalkTree (node):
+def WalkTreePass1 (node):
+	global currentFunc, currentFuncName
+	isIdentifier = node.type == 'identifier'
+	if node.type == 'assignment_expression':
+		AddToVarCount (node.children[0])
+	elif isIdentifier:
+		AddToVarCount (node)
+	if currentFunc and AtEndOfHierarchy(currentFunc, node):
+		currentFuncName = ''
+		currentFunc = None
+	elif (isIdentifier and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
+		currentFuncName = node.text.decode('utf-8')
+		currentFunc = node.parent
+	for child in node.children:
+		WalkTreePass1 (child)
+
+def AddToVarCount (varNode):
+	varName = varNode.text.decode('utf-8')
+	if currentFuncName not in varsCnts:
+		varsCnts[currentFuncName] = {varName : 1}
+	elif varName in varsCnts[currentFuncName]:
+		varsCnts[currentFuncName][varName] += 1
+	else:
+		varsCnts[currentFuncName][varName] = 1
+
+def WalkTreePass2 (node):
 	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
@@ -93,7 +123,7 @@ def WalkTree (node):
 					skipNodesAtPositions.append(node.end_byte)
 					skipNodesAtPositions.append(node2.end_byte)
 					skipNodesAtPositions.append(node3.end_byte)
-					AddToOutput ('$' + node3Txt[0] + node3Txt[-1])
+					AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
 		else:
 			for charValue, name in REMAP_CHARS.items():
 				if nodeTxt == name:
@@ -107,9 +137,9 @@ def WalkTree (node):
 		if isOfOrIn:
 			AddToOutput (' ')
 		elif inVarDeclrn or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
-			if inVarDeclrn and currentFunc:
+			if inVarDeclrn:
 				varName = TryMangleNode(nextSibling)
-				if varName not in currentFuncVarsNames:
+				if currentFunc and varName not in currentFuncVarsNames + usedNames['']:
 					currentFuncVarsNames.append(varName)
 			nodeTxt = ''
 		elif not debug:
@@ -142,10 +172,10 @@ def WalkTree (node):
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
 			mangledMembers[nodeTxt] = mangledMembers['']
-		if nextSibling and (isOfOrIn or node.type == 'new') and nextSibling.type not in ['{', 'array']:
+		if nextSibling and (isOfOrIn or node.type in ['new', 'class', 'delete']) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
-		WalkTree (child)
+		WalkTreePass2 (child)
 	if node.type in ['lexical_declaration', 'variable_declaration', 'expression_statement'] and not nodeTxt.endswith(';') and (not nextSibling or nextSibling.type != '}') and node.end_byte < len(txt) - 1:
 		AddToOutput (';')
 
@@ -216,11 +246,13 @@ def CondenseArgs (node, argsCntsIndctrsVals : list):
 				break
 		else:
 			skipNodesAtPositions.append(sibling.end_byte)
-	if argCnt >= 0 and argCnt < len(argsCntsIndctrsVals):
+	if argCnt < len(argsCntsIndctrsVals):
 		nodeTxt = ''
 		AddToOutput (chr(argsCntsIndctrsVals[argCnt]))
 		skipNodesAtPositions.append(node.end_byte)
 		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
+	else:
+		skipNodesAtPositions = []
 
 def AtEndOfHierarchy (root, node) -> bool:
 	while True:
@@ -250,7 +282,14 @@ for arg in sys.argv:
 
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
-WalkTree (tree.root_node)
+WalkTreePass1 (tree.root_node)
+for funcName in varsCnts:
+	funcVarsCnts = varsCnts[funcName]
+	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
+	if funcName != '':
+		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
+	varsCnts[funcName] = funcVarsCnts
+WalkTreePass2 (tree.root_node)
 outputPrefix = 'a=`'
 outputSuffix = '`'
 evalCode = '\neval(d)'

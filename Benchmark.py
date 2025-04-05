@@ -8,7 +8,10 @@ def GenPlot (dict_ : {}):
 	for i in range(len(dict_)):
 		currentXLoc += width + spacing / len(dict_)
 		xLocs.append(currentXLoc)
-	plot.bar(x = xLocs, height = dict_.values(), width = width, tick_label = dict_.keys(), color = ['black', 'red', 'green', 'blue', 'yellow', 'purple'])
+	labels = []
+	for key, value in dict_.items():
+		labels.append(key + '\n' + str(value))
+	plot.bar(x = xLocs, height = dict_.values(), width = width, tick_label = labels, color = ['black', 'red', 'green', 'blue', 'yellow', 'purple'])
 	plot.show()
 
 timeResults = {}
