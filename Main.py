@@ -22,20 +22,17 @@ for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
 DOM_REMAP_CODE = '''a={}
-for(o of [Element,Node,String,Window]){p=o.prototype
+for(o of [Element,Node,String,Window,Array,Document,XMLHttpRequest]){p=o.prototype
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 b=n[s]
-while(b in a){s++
+while(b in a||a[b]==p){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
-a[b]=1}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+a[b]=p}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
-VAR_REPLACE_CHAR_VAL = 27
-WINDOW_REPLACE_CHAR_VAL = 26
-REMAP_CHARS = {17 : 'function', 18 : 'return', 19 : 'while', 20 : 'else', 21 : 'this', 22 : 'document', 23 : 'Math', 24 : 'case', 25 : 'for', VAR_REPLACE_CHAR_VAL : 'var', WINDOW_REPLACE_CHAR_VAL : 'window'}
-REMAP_CODE = 'e=' + str(REMAP_CHARS).replace(' ', '') + '''
-for([k,v]of Object.entries(e))d=d.replaceAll(String.fromCharCode(k),v+' ')'''
+VAR_REPLACE_CHAR_VAL = 17
+WINDOW_REPLACE_CHAR_VAL = 18
 ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
 d=''
 CA(b,'(',')')
@@ -51,8 +48,9 @@ if(i<l){d+=','
 p++}}d+=g}else d+=c}}'''
 # for name, newName in MEMBER_REMAP.items():
 # 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
+FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
-JS_NAMES = ['style', 'document', 'window', 'Math', 'if', 'do', 'of', 'in']
+JS_NAMES = ['Math', 'window', 'document', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -101,9 +99,12 @@ def AddToVarCount (varNode):
 		varsCnts[currentFuncName][varName] = 1
 
 def WalkTreePass2 (node):
-	global output, nodeTxt, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
+	global output, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
+	if node.type == ';':
+		AddToOutput (nodeTxt)
+		return
 	if node.parent:
 		siblings = node.parent.children
 		siblingIdx = siblings.index(node)
@@ -124,24 +125,17 @@ def WalkTreePass2 (node):
 					skipNodesAtPositions.append(node2.end_byte)
 					skipNodesAtPositions.append(node3.end_byte)
 					AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
-		else:
-			for charValue, name in REMAP_CHARS.items():
-				if nodeTxt == name:
-					if debug:
-						nodeTxt += ' '
-					else:
-						nodeTxt = chr(charValue)
-					break
 		isOfOrIn = node.type in ['of', 'in']
 		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
 			AddToOutput (' ')
 		elif inVarDeclrn or (node.type == ';' and AtEndOfHierarchy(node.parent, node) and node.parent.parent.text.decode('utf-8').endswith('}')):
+			if not currentFunc or not inVarDeclrn:
+				nodeTxt = ''
 			if inVarDeclrn:
 				varName = TryMangleNode(nextSibling)
 				if currentFunc and varName not in currentFuncVarsNames + usedNames['']:
 					currentFuncVarsNames.append(varName)
-			nodeTxt = ''
 		elif not debug:
 			if node.type == '(' and nextSibling.type != 'binary_expression':
 				CondenseArgs (node, ARGS_INDCTRS)
@@ -151,16 +145,17 @@ def WalkTreePass2 (node):
 			AddToOutput (nodeTxt)
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			funcBodyPrefix = ''
-			for varName in currentFuncVarsNames:
-				funcBodyPrefix += varName + ','
-			if funcBodyPrefix != '':
-				funcBodyPrefix = chr(VAR_REPLACE_CHAR_VAL) + funcBodyPrefix[: -1] + ';'
+			if not debug:
+				for varName in currentFuncVarsNames:
+					funcBodyPrefix += varName + ','
+				if funcBodyPrefix != '':
+					funcBodyPrefix = chr(VAR_REPLACE_CHAR_VAL) + funcBodyPrefix[: -1] + ';'
 			funcBodyStartIdx = currentFuncTxt.find('{') + 1
-			output += currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :]
 			currentFuncName = ''
 			currentFunc = None
-			currentFuncTxt = ''
 			currentFuncVarsNames = []
+			AddToOutput (currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :])
+			currentFuncTxt = ''
 		elif (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeTxt
 			currentFunc = node.parent
@@ -172,7 +167,7 @@ def WalkTreePass2 (node):
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
 			mangledMembers[nodeTxt] = mangledMembers['']
-		if nextSibling and (isOfOrIn or node.type in ['new', 'class', 'delete']) and nextSibling.type not in ['{', 'array']:
+		if nextSibling and (isOfOrIn or node.type in ['new', 'class', 'delete', 'case', 'class', 'function', 'return'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
 		WalkTreePass2 (child)
@@ -202,7 +197,7 @@ def TryMangleOrRemapNode (node) -> str:
 			return MEMBER_REMAP[nodeTxt]
 		else:
 			parentNodeTxt = node.parent.text.decode('utf-8')
-			if node.parent.type == 'method_definition' and parentNodeTxt not in usedNames[currentFuncName] + JS_NAMES:
+			if node.parent.type == 'method_definition':
 				return TryMangleNode(node)
 			else:
 				siblingIdx = node.parent.children.index(node)
@@ -214,23 +209,25 @@ def TryMangleNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
 	if nodeTxt in JS_NAMES:
 		return nodeTxt
-	if len(nodeTxt) > 1:
+	if len(nodeTxt) > 1 or nodeTxt in usedNames[currentFuncName]:
 		mangledMembers_ = mangledMembers[currentFuncName]
 		if nodeTxt not in mangledMembers_:
 			usedNames_ = usedNames[currentFuncName]
-			while not currentFunc or unusedNames[currentFuncName] == []:
-				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
-					unusedNames[currentFuncName].append(unusedName)
-					break
-			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(random.randint(0, len(unusedNames[currentFuncName]) - 1))
-			if mangledMembers[currentFuncName][nodeTxt] not in usedNames_:
-				mangledMember = mangledMembers[currentFuncName][nodeTxt]
-				usedNames[currentFuncName].append(mangledMember)
+			unusedNameIdx = 0
+			if unusedNames[currentFuncName] != []:
+				unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
+			if not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
+				while True:
+					unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+					if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
+						unusedNames[currentFuncName].append(unusedName)
+						unusedNameIdx = len(unusedNames[currentFuncName]) - 1
+						break
+			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(unusedNameIdx)
+			mangledMember = mangledMembers[currentFuncName][nodeTxt]
+			usedNames[currentFuncName].append(mangledMember)
 		if nodeTxt in mangledMembers[currentFuncName]:
 			nodeTxt = mangledMembers[currentFuncName][nodeTxt]
-	elif nodeTxt not in usedNames[currentFuncName]:
-		usedNames[currentFuncName].append(nodeTxt)
 	return nodeTxt
 
 def CondenseArgs (node, argsCntsIndctrsVals : list):
@@ -247,7 +244,6 @@ def CondenseArgs (node, argsCntsIndctrsVals : list):
 		else:
 			skipNodesAtPositions.append(sibling.end_byte)
 	if argCnt < len(argsCntsIndctrsVals):
-		nodeTxt = ''
 		AddToOutput (chr(argsCntsIndctrsVals[argCnt]))
 		skipNodesAtPositions.append(node.end_byte)
 		skipNodesAtPositions.append(siblings[len(siblings) - 1].end_byte)
@@ -290,14 +286,24 @@ for funcName in varsCnts:
 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
 	varsCnts[funcName] = funcVarsCnts
 WalkTreePass2 (tree.root_node)
-outputPrefix = 'a=`'
-outputSuffix = '`'
-evalCode = '\neval(d)'
+funcReplaceCode = '''
+a=`function ${name}(`
+for(b=97;b<105;b++)a+=String.fromCharCode(b)+','
+a+='){var '
+for(b=105;b<123;b++)b+=String.fromCharCode(b)+'=0,'
+a+=';'
+for(b=65;b<90;b++){c=String.fromCharCode(b)
+a+=`let ${c}=window.${c}${c};`}
+a+= body+'}'
+'''
 if debug:
 	outputPrefix = ''
 	outputSuffix = ''
 	evalCode = ''
-output = DOM_REMAP_CODE + outputPrefix + output + outputSuffix + '\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\n' + REMAP_CODE + evalCode
+	funcReplaceCode = ''
+	output = DOM_REMAP_CODE + output
+else:
+	output = DOM_REMAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
