@@ -26,7 +26,7 @@ for(o of [Element,Node,String,Window,Array,Document,XMLHttpRequest]){p=o.prototy
 for(n of Object.getOwnPropertyNames(p)){s=0
 e=n.length-1
 b=n[s]
-while(b in a||a[b]==p){s++
+while(b in a){s++
 b=n[s]+n[e]
 e--}try{p[b]=p[n]
 a[b]=p}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
@@ -50,7 +50,7 @@ p++}}d+=g}else d+=c}}'''
 # 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
 FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
-JS_NAMES = ['Math', 'window', 'document', 'if', 'do', 'of', 'in']
+JS_NAMES = ['Math', 'window', 'document', 'JSON', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -67,39 +67,39 @@ mangledMembers[currentFuncName] = {}
 usedNames = {}
 usedNames[currentFuncName] = ['_', '$', 'CA']
 skipNodesAtPositions = []
-varsCnts = {}
-funcsCnts = {}
-maxLocalVarsCnt = 0
+# varsCnts = {}
+# funcsCnts = {}
+# maxLocalVarsCnt = 0
 compress = True
 debug = False
 
-def WalkTreePass1 (node):
-	global currentFunc, currentFuncName
-	isIdentifier = node.type == 'identifier'
-	if node.type == 'assignment_expression':
-		AddToVarCount (node.children[0])
-	elif isIdentifier:
-		AddToVarCount (node)
-	if currentFunc and AtEndOfHierarchy(currentFunc, node):
-		currentFuncName = ''
-		currentFunc = None
-	elif (isIdentifier and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
-		currentFuncName = node.text.decode('utf-8')
-		currentFunc = node.parent
-	for child in node.children:
-		WalkTreePass1 (child)
+# def WalkTreePass1 (node):
+# 	global currentFunc, currentFuncName
+# 	isIdentifier = node.type == 'identifier'
+# 	if node.type == 'assignment_expression':
+# 		AddToVarCount (node.children[0])
+# 	elif isIdentifier:
+# 		AddToVarCount (node)
+# 	if currentFunc and AtEndOfHierarchy(currentFunc, node):
+# 		currentFuncName = ''
+# 		currentFunc = None
+# 	elif (isIdentifier and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
+# 		currentFuncName = node.text.decode('utf-8')
+# 		currentFunc = node.parent
+# 	for child in node.children:
+# 		WalkTreePass1 (child)
 
-def AddToVarCount (varNode):
-	varName = varNode.text.decode('utf-8')
-	if currentFuncName not in varsCnts:
-		varsCnts[currentFuncName] = {varName : 1}
-	elif varName in varsCnts[currentFuncName]:
-		varsCnts[currentFuncName][varName] += 1
-	else:
-		varsCnts[currentFuncName][varName] = 1
+# def AddToVarCount (varNode):
+# 	varName = varNode.text.decode('utf-8')
+# 	if currentFuncName not in varsCnts:
+# 		varsCnts[currentFuncName] = {varName : 1}
+# 	elif varName in varsCnts[currentFuncName]:
+# 		varsCnts[currentFuncName][varName] += 1
+# 	else:
+# 		varsCnts[currentFuncName][varName] = 1
 
 def WalkTreePass2 (node):
-	global output, currentFunc, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
+	global output, currentFunc, usedNames, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	print(node.type, nodeTxt)
 	if node.type == ';':
@@ -184,13 +184,6 @@ def AddToOutput (add : str):
 def TryMangleOrRemapNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == 'identifier':
-		if not debug:
-			if nodeTxt == 'document':
-				return chr(8)
-			elif nodeTxt == 'window':
-				return chr(9)
-			elif nodeTxt == 'Math':
-				return chr(11)
 		return TryMangleNode(node)
 	elif node.type == 'property_identifier':
 		if nodeTxt in MEMBER_REMAP:
@@ -210,24 +203,21 @@ def TryMangleNode (node) -> str:
 	if nodeTxt in JS_NAMES:
 		return nodeTxt
 	if len(nodeTxt) > 1 or nodeTxt in usedNames[currentFuncName]:
-		mangledMembers_ = mangledMembers[currentFuncName]
-		if nodeTxt not in mangledMembers_:
+		if nodeTxt not in mangledMembers[currentFuncName]:
 			usedNames_ = usedNames[currentFuncName]
 			unusedNameIdx = 0
 			if unusedNames[currentFuncName] != []:
 				unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
-			if not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
-				while True:
-					unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-					if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
-						unusedNames[currentFuncName].append(unusedName)
-						unusedNameIdx = len(unusedNames[currentFuncName]) - 1
-						break
+			while not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
+				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+				if unusedName not in list(MEMBER_REMAP.values()) + usedNames_ + JS_NAMES:
+					unusedNames[currentFuncName].append(unusedName)
+					unusedNameIdx = len(unusedNames[currentFuncName]) - 1
+					break
 			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(unusedNameIdx)
 			mangledMember = mangledMembers[currentFuncName][nodeTxt]
 			usedNames[currentFuncName].append(mangledMember)
-		if nodeTxt in mangledMembers[currentFuncName]:
-			nodeTxt = mangledMembers[currentFuncName][nodeTxt]
+		nodeTxt = mangledMembers[currentFuncName][nodeTxt]
 	return nodeTxt
 
 def CondenseArgs (node, argsCntsIndctrsVals : list):
@@ -278,24 +268,24 @@ for arg in sys.argv:
 
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
-WalkTreePass1 (tree.root_node)
-for funcName in varsCnts:
-	funcVarsCnts = varsCnts[funcName]
-	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
-	if funcName != '':
-		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
-	varsCnts[funcName] = funcVarsCnts
+# WalkTreePass1 (tree.root_node)
+# for funcName in varsCnts:
+# 	funcVarsCnts = varsCnts[funcName]
+# 	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
+# 	if funcName != '':
+# 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
+# 	varsCnts[funcName] = funcVarsCnts
 WalkTreePass2 (tree.root_node)
-funcReplaceCode = '''
-a=`function ${name}(`
-for(b=97;b<105;b++)a+=String.fromCharCode(b)+','
-a+='){var '
-for(b=105;b<123;b++)b+=String.fromCharCode(b)+'=0,'
-a+=';'
-for(b=65;b<90;b++){c=String.fromCharCode(b)
-a+=`let ${c}=window.${c}${c};`}
-a+= body+'}'
-'''
+# funcReplaceCode = '''
+# a=`function ${name}(`
+# for(b=97;b<105;b++)a+=String.fromCharCode(b)+','
+# a+='){var '
+# for(b=105;b<123;b++)b+=String.fromCharCode(b)+'=0,'
+# a+=';'
+# for(b=65;b<90;b++){c=String.fromCharCode(b)
+# a+=`let ${c}=window.${c}${c};`}
+# a+= body+'}'
+# '''
 if debug:
 	outputPrefix = ''
 	outputSuffix = ''
