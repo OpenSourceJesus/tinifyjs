@@ -21,12 +21,11 @@ _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-DOM_AND_CSS_REMAP_CODE = '''
-for(o of [Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
+DOM_AND_CSS_REMAP_CODE = '''for(o of [Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
 a={}
 for(n of Object.getOwnPropertyNames(p)){s=0
 b=n[s]
-if (b in a)b+=n[n.length-1]
+if(b in a)b+=n[n.length-1]
 try{p[b]=p[n]
 a[b]=p}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
@@ -49,7 +48,7 @@ p++}}d+=g}else d+=c}}'''
 # 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
 # FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
-JS_NAMES = ['Math', 'window', 'document', 'JSON', 'if', 'do', 'of', 'in']
+JS_NAMES = ['Math', 'window', 'document', 'JSON', 'parse', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -167,7 +166,7 @@ def WalkTreePass2 (node):
 					unusedNames[nodeTxt].remove(usedName)
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
-			mangledMembers[nodeTxt] = mangledMembers['']
+			mangledMembers[nodeTxt] = dict(mangledMembers[''])
 		if nextSibling and (isOfOrIn or node.type in ['new', 'case', 'class', 'delete', 'return', 'function'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
@@ -191,7 +190,7 @@ def TryMangleOrRemapNode (node) -> str:
 			return MEMBER_REMAP[nodeTxt]
 		else:
 			parentNodeTxt = node.parent.text.decode('utf-8')
-			if node.parent.type == 'method_definition':
+			if node.parent.type in ['method_definition', 'member_expression']:
 				return TryMangleNode(node)
 			else:
 				siblingIdx = node.parent.children.index(node)
@@ -255,6 +254,9 @@ def Compress (filePath : str) -> str:
 	subprocess.check_call(cmd)
 	return open(filePath + '.gz', 'rb').read()
 
+# def GetTerserCommand (filePath : str):
+# 	return ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers', '-c', 'ecma=2025', '-c', 'keep_fargs=false', '-c', 'unsafe', '-c', 'unsafe_arrows', '-c', 'unsafe_comps', '-c', 'unsafe_Function', '-c', 'unsafe_math', '-c', 'unsafe_symbols', '-c', 'unsafe_methods', '-c', 'unsafe_proto', '-c', 'unsafe_regexp', '-c', 'unsafe_undefined', '-m', 'eval', '-m', 'toplevel', '--mangle-props', 'keep_quoted="strict"']
+
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDCTR):
 		txt += arg[len(TEXT_INDCTR) :]
@@ -287,7 +289,6 @@ WalkTreePass2 (tree.root_node)
 # a+=`let ${c}=window.${c}${c};`}
 # a+= body+'}'
 # '''
-print('YAY', mangledMembers)
 if debug:
 	output = DOM_AND_CSS_REMAP_CODE + output
 else:
