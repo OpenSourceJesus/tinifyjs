@@ -21,14 +21,13 @@ _memberRemap = open(os.path.join(_thisDir, 'MemberRemap'), 'r').read()
 for line in _memberRemap.split('\n'):
 	parts = line.split()
 	MEMBER_REMAP[parts[0]] = parts[1]
-DOM_REMAP_CODE = '''a={}
-for(o of [Element,Node,String,Window,Array,Document,XMLHttpRequest]){p=o.prototype
+DOM_AND_CSS_REMAP_CODE = '''
+for(o of [Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
+a={}
 for(n of Object.getOwnPropertyNames(p)){s=0
-e=n.length-1
 b=n[s]
-while(b in a){s++
-b=n[s]+n[e]
-e--}try{p[b]=p[n]
+if (b in a)b+=n[n.length-1]
+try{p[b]=p[n]
 a[b]=p}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 VAR_REPLACE_CHAR_VAL = 17
@@ -48,7 +47,7 @@ if(i<l){d+=','
 p++}}d+=g}else d+=c}}'''
 # for name, newName in MEMBER_REMAP.items():
 # 	ARGS_AND_IDXS_CONDENSE_CODE = ARGS_AND_IDXS_CONDENSE_CODE.replace(name, newName)
-FUNC_REPLACE_CHAR_VAL = 19
+# FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
 JS_NAMES = ['Math', 'window', 'document', 'JSON', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
@@ -136,12 +135,14 @@ def WalkTreePass2 (node):
 				varName = TryMangleNode(nextSibling)
 				if currentFunc and varName not in currentFuncVarsNames + usedNames['']:
 					currentFuncVarsNames.append(varName)
-		elif not debug:
+		elif not debug and nextSibling:
 			if node.type == '(' and nextSibling.type != 'binary_expression':
 				CondenseArgs (node, ARGS_INDCTRS)
 			elif node.type == '[' and nextSibling.type != 'array':
 				CondenseArgs (node, IDXS_INDCTRS)
 		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1):
+			if inVarDeclrn:
+				nodeTxt = 'var '
 			AddToOutput (nodeTxt)
 		if currentFunc and AtEndOfHierarchy(currentFunc, node):
 			funcBodyPrefix = ''
@@ -167,7 +168,7 @@ def WalkTreePass2 (node):
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
 			mangledMembers[nodeTxt] = mangledMembers['']
-		if nextSibling and (isOfOrIn or node.type in ['new', 'class', 'delete', 'case', 'class', 'function', 'return'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
+		if nextSibling and (isOfOrIn or node.type in ['new', 'case', 'class', 'delete', 'return', 'function'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
 		WalkTreePass2 (child)
@@ -286,14 +287,11 @@ WalkTreePass2 (tree.root_node)
 # a+=`let ${c}=window.${c}${c};`}
 # a+= body+'}'
 # '''
+print('YAY', mangledMembers)
 if debug:
-	outputPrefix = ''
-	outputSuffix = ''
-	evalCode = ''
-	funcReplaceCode = ''
-	output = DOM_REMAP_CODE + output
+	output = DOM_AND_CSS_REMAP_CODE + output
 else:
-	output = DOM_REMAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+	output = DOM_AND_CSS_REMAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
