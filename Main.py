@@ -15,7 +15,8 @@ ARGS_INDCTRS.append(11)
 IDXS_INDCTRS = [12]
 for i in range(14, 17):
 	IDXS_INDCTRS.append(i)
-CSS_MAP_CODE = '''for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+DOM_AND_CSS_REMAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
+for(n of Object.getOwnPropertyNames(p)){try{p[n[2]+String.fromCharCode(n.length+96)]=p[n]}catch(e){}console.log(n,n[1]+String.fromCharCode(n.length+96)))}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 VAR_REPLACE_CHAR_VAL = 17
 WINDOW_REPLACE_CHAR_VAL = 18
@@ -34,7 +35,7 @@ if(i<l){d+=','
 p++}}d+=g}else d+=c}}'''
 # FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
-JS_NAMES = ['Math', 'window', 'document', 'JSON', 'parseInt', 'if', 'do', 'of', 'in']
+JS_NAMES = ['Math', 'window', 'document', 'JSON', 'parseInt', 'cssText', 'charCodeAt', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -59,7 +60,6 @@ skipNodesAtPositions = []
 # userClassFuncsCnts = {}
 # maxLocalVarsCnt = 0
 userClassFuncs = []
-jsFuncsMap = {}
 compress = True
 debug = False
 
@@ -80,12 +80,6 @@ def WalkTreePass1 (node):
 	if node.type == 'property_identifier':
 		if node.parent.type == 'method_definition' and node.parent.parent.type == 'class_body':
 			userClassFuncs.append(nodeTxt)
-		elif nodeTxt not in jsFuncsMap:
-			siblingIdx = node.parent.children.index(node)
-			if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in JS_NAMES and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
-				mapTo = TryMangleNode(node)
-				if len(nodeTxt) > len(mapTo):
-					jsFuncsMap[nodeTxt] = mapTo
 	for child in node.children:
 		WalkTreePass1 (child)
 
@@ -121,10 +115,11 @@ def WalkTreePass2 (node):
 				if node2.text == b'.':
 					node3 = parent2.children[parentIdx + 2]
 					node3Txt = node3.text.decode('utf-8')
-					skipNodesAtPositions.append(node.end_byte)
-					skipNodesAtPositions.append(node2.end_byte)
-					skipNodesAtPositions.append(node3.end_byte)
-					AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
+					if node3Txt not in JS_NAMES:
+						skipNodesAtPositions.append(node.end_byte)
+						skipNodesAtPositions.append(node2.end_byte)
+						skipNodesAtPositions.append(node3.end_byte)
+						AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
 		isOfOrIn = node.type in ['of', 'in']
 		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
@@ -195,30 +190,29 @@ def TryMangleOrMapNode (node) -> str:
 					return TryMangleNode(node)
 				elif siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
 					return TryMangleNode(node)
-			elif (siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression':
-				nodeTxt = jsFuncsMap[nodeTxt]
+			elif (siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression' and len(nodeTxt) <= len(string.ascii_letters) and len(nodeTxt) > 2:
+				nodeTxt = nodeTxt[2] + chr(len(nodeTxt) + 96)
 	return nodeTxt
 
 def TryMangleNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
-	if nodeTxt in JS_NAMES:
+	if len(nodeTxt) == 1 or nodeTxt in JS_NAMES:
 		return nodeTxt
-	if len(nodeTxt) > 1 or nodeTxt in usedNames[currentFuncName]:
-		if nodeTxt not in mangledMembers[currentFuncName]:
-			usedNames_ = usedNames[currentFuncName]
-			unusedNameIdx = 0
-			if unusedNames[currentFuncName] != []:
-				unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
-			while not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
-				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in usedNames_ + JS_NAMES:
-					unusedNames[currentFuncName].append(unusedName)
-					unusedNameIdx = len(unusedNames[currentFuncName]) - 1
-					break
-			mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(unusedNameIdx)
-			mangledMember = mangledMembers[currentFuncName][nodeTxt]
-			usedNames[currentFuncName].append(mangledMember)
-		nodeTxt = mangledMembers[currentFuncName][nodeTxt]
+	if nodeTxt not in mangledMembers[currentFuncName]:
+		usedNames_ = usedNames[currentFuncName]
+		unusedNameIdx = 0
+		if unusedNames[currentFuncName] != []:
+			unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
+		while not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
+			unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+			if unusedName not in usedNames_ + JS_NAMES:
+				unusedNames[currentFuncName].append(unusedName)
+				unusedNameIdx = len(unusedNames[currentFuncName]) - 1
+				break
+		mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(unusedNameIdx)
+		mangledMember = mangledMembers[currentFuncName][nodeTxt]
+		usedNames[currentFuncName].append(mangledMember)
+	nodeTxt = mangledMembers[currentFuncName][nodeTxt]
 	return nodeTxt
 
 def CondenseArgs (node, argsCntsIndctrsVals : list):
@@ -294,13 +288,10 @@ WalkTreePass2 (tree.root_node)
 # a+=`let ${c}=window.${c}${c};`}
 # a+= body+'}'
 # '''
-domMapCode = 'a=' + str(jsFuncsMap).replace(' ', '') + '''
-for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
-for(n of Object.getOwnPropertyNames(p)){try{p[a[n]]=p[n]}catch(e){}}}'''
 if debug:
-	output = domMapCode + '\n' + CSS_MAP_CODE + output
+	output = DOM_AND_CSS_REMAP_CODE + output
 else:
-	output = domMapCode + '\n' + CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+	output = DOM_AND_CSS_REMAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
