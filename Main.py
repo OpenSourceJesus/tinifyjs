@@ -16,7 +16,7 @@ IDXS_INDCTRS = [12]
 for i in range(14, 17):
 	IDXS_INDCTRS.append(i)
 DOM_AND_CSS_REMAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
-for(n of Object.getOwnPropertyNames(p)){try{p[n[2]+String.fromCharCode(n.length+96)]=p[n]}catch(e){}console.log(n,n[1]+String.fromCharCode(n.length+96)))}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+for(n of Object.getOwnPropertyNames(p)){try{p[n[2]+String.fromCharCode(n.length+96)]=p[n]}catch(e){}console.log(n,n[1]+String.fromCharCode(n.length+96))}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 VAR_REPLACE_CHAR_VAL = 17
 WINDOW_REPLACE_CHAR_VAL = 18
@@ -35,7 +35,8 @@ if(i<l){d+=','
 p++}}d+=g}else d+=c}}'''
 # FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
-JS_NAMES = ['Math', 'window', 'document', 'JSON', 'parseInt', 'cssText', 'charCodeAt', 'if', 'do', 'of', 'in']
+DONT_MANGLE_SUB_MEMBERS = ['Math', 'JSON']
+DONT_MANGLE = DONT_MANGLE_SUB_MEMBERS + ['window', 'document', 'String', 'parseInt', 'cssText', 'charCodeAt', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -115,11 +116,10 @@ def WalkTreePass2 (node):
 				if node2.text == b'.':
 					node3 = parent2.children[parentIdx + 2]
 					node3Txt = node3.text.decode('utf-8')
-					if node3Txt not in JS_NAMES:
-						skipNodesAtPositions.append(node.end_byte)
-						skipNodesAtPositions.append(node2.end_byte)
-						skipNodesAtPositions.append(node3.end_byte)
-						AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
+					skipNodesAtPositions.append(node.end_byte)
+					skipNodesAtPositions.append(node2.end_byte)
+					skipNodesAtPositions.append(node3.end_byte)
+					AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
 		isOfOrIn = node.type in ['of', 'in']
 		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
@@ -184,7 +184,7 @@ def TryMangleOrMapNode (node) -> str:
 		return TryMangleNode(node)
 	elif node.type == 'property_identifier':
 		siblingIdx = node.parent.children.index(node)
-		if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in JS_NAMES:
+		if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in DONT_MANGLE_SUB_MEMBERS:
 			if nodeTxt in userClassFuncs:
 				if node.parent.type in ['method_definition', 'member_expression']:
 					return TryMangleNode(node)
@@ -196,7 +196,7 @@ def TryMangleOrMapNode (node) -> str:
 
 def TryMangleNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
-	if len(nodeTxt) == 1 or nodeTxt in JS_NAMES:
+	if len(nodeTxt) == 1 or nodeTxt in DONT_MANGLE:
 		return nodeTxt
 	if nodeTxt not in mangledMembers[currentFuncName]:
 		usedNames_ = usedNames[currentFuncName]
@@ -205,7 +205,7 @@ def TryMangleNode (node) -> str:
 			unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
 		while not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
 			unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-			if unusedName not in usedNames_ + JS_NAMES:
+			if unusedName not in usedNames_ + DONT_MANGLE:
 				unusedNames[currentFuncName].append(unusedName)
 				unusedNameIdx = len(unusedNames[currentFuncName]) - 1
 				break
