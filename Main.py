@@ -1,4 +1,4 @@
-import os, sys, string, random, subprocess, tree_sitter_javascript as tsjs
+import os, sys, math, string, random, subprocess, tree_sitter_javascript as tsjs
 from tree_sitter import Language, Parser
 
 JS_LANG = Language(tsjs.language())
@@ -15,17 +15,27 @@ ARGS_INDCTRS.append(11)
 IDXS_INDCTRS = [12]
 for i in range(14, 17):
 	IDXS_INDCTRS.append(i)
-DOM_AND_CSS_REMAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
-for(n of Object.getOwnPropertyNames(p)){try{p[n[2]+String.fromCharCode(n.length+96)]=p[n]}catch(e){}console.log(n,n[1]+String.fromCharCode(n.length+96))}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+DOM_FUNCS_AND_CSS_MAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest]){p=o.prototype
+for(n of Object.getOwnPropertyNames(p)){try{a=n[0]+n[Math.ceil(n.length*.7)]
+console.log(n,a)
+p[a]=p[n]
+a=n[2]+n[Math.ceil(n.length/4)]
+console.log(n,a)
+p[a]=p[n]
+a=n[3]+n[Math.ceil(n.length/2)]
+console.log(n,a)
+p[a]=p[n]
+a=n[n.length-3]+n[1]
+console.log(n,a)
+p[a]=p[n]}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 VAR_REPLACE_CHAR_VAL = 17
 WINDOW_REPLACE_CHAR_VAL = 18
-ARGS_AND_IDXS_CONDENSE_CODE = 'b=' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + '\nc=' + str(IDXS_INDCTRS).replace(' ', '') + '''
-d=''
-CA(b,'(',')')
+ARGS_AND_IDXS_CONDENSE_CODE = '''d=''
+CA(''' + str(ARGS_INDCTRS).replace(' : ', ':').replace(', ', ',') + ''','(',')')
 a=d
 d=''
-CA(c,'[',']')
+CA(''' + str(IDXS_INDCTRS).replace(' ', '') + ''','[',']')
 function CA(e,f,g){for(p=0;p<a.length;p++){c=a[p]
 l=e.indexOf(c.charCodeAt(0))
 if(l>-1){d+=f
@@ -48,39 +58,46 @@ currentFuncVarsNames = []
 unusedNames = {}
 unusedNames[currentFuncName] = []
 unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
-unusedNames['.'] = []
-unusedNames['.'].extend(OKAY_NAME_CHARS)
 mangledMembers = {}
 mangledMembers[currentFuncName] = {}
-mangledMembers['.'] = {}
 usedNames = {}
 usedNames[currentFuncName] = ['_', '$', 'CA']
-usedNames['.'] = []
 skipNodesAtPositions = []
 # varsCnts = {}
 # userClassFuncsCnts = {}
 # maxLocalVarsCnt = 0
 userClassFuncs = []
+domFuncsMap = {}
 compress = True
 debug = False
 
 def WalkTreePass1 (node):
-	# global currentFunc, currentFuncName
+	global currentFunc
+	nodeTxt = node.text.decode('utf-8')
+	print(node.type, nodeTxt)
 	# isIdentifier = node.type == 'identifier'
 	# if node.type == 'assignment_expression':
 	# 	AddToVarCount (node.children[0])
 	# elif isIdentifier:
 	# 	AddToVarCount (node)
-	# if currentFunc and AtEndOfHierarchy(currentFunc, node):
-	# 	currentFuncName = ''
-	# 	currentFunc = None
-	# elif (isIdentifier and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
-	# 	currentFuncName = node.text.decode('utf-8')
-	# 	currentFunc = node.parent
-	nodeTxt = node.text.decode('utf-8')
-	if node.type == 'property_identifier':
+	isPropIdentifier = node.type == 'property_identifier'
+	if currentFunc and AtEndOfHierarchy(currentFunc, node):
+		currentFuncName = ''
+		currentFunc = None
+	elif (node.type == 'identifier' and node.parent.type == 'function_declaration') or (isPropIdentifier and node.parent.type == 'method_definition'):
+		currentFuncName = node.text.decode('utf-8')
+		currentFunc = node.parent
+	if isPropIdentifier:
 		if node.parent.type == 'method_definition' and node.parent.parent.type == 'class_body':
 			userClassFuncs.append(nodeTxt)
+		elif nodeTxt not in domFuncsMap and nodeTxt not in DONT_MANGLE:
+			siblingIdx = node.parent.children.index(node)
+			if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in DONT_MANGLE_SUB_MEMBERS and len(nodeTxt) > 2 and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
+				map = GetDomFuncMap(nodeTxt)
+				for newName in map:
+					if newName not in domFuncsMap.values():
+						domFuncsMap[nodeTxt] = newName
+						break
 	for child in node.children:
 		WalkTreePass1 (child)
 
@@ -93,10 +110,17 @@ def WalkTreePass1 (node):
 # 	else:
 # 		varsCnts[currentFuncName][varName] = 1
 
+def GetDomFuncMap (funcName : str):
+	output = []
+	output.append(funcName[0] + funcName[math.ceil(len(funcName) * .7)])
+	output.append(funcName[2] + funcName[math.ceil(len(funcName) / 4)])
+	output.append(funcName[3] + funcName[math.ceil(len(funcName) / 2)])
+	output.append(funcName[len(funcName) - 3] + funcName[1])
+	return output
+
 def WalkTreePass2 (node):
 	global output, currentFunc, usedNames, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
-	print(node.type, nodeTxt)
 	if node.type == ';':
 		AddToOutput (nodeTxt)
 		return
@@ -180,6 +204,8 @@ def AddToOutput (add : str):
 
 def TryMangleOrMapNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
+	if nodeTxt in DONT_MANGLE:
+		return nodeTxt
 	if node.type == 'identifier':
 		return TryMangleNode(node)
 	elif node.type == 'property_identifier':
@@ -190,8 +216,8 @@ def TryMangleOrMapNode (node) -> str:
 					return TryMangleNode(node)
 				elif siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
 					return TryMangleNode(node)
-			elif (siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression' and len(nodeTxt) <= len(string.ascii_letters) and len(nodeTxt) > 2:
-				nodeTxt = nodeTxt[2] + chr(len(nodeTxt) + 96)
+			elif len(nodeTxt) > 2 and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
+				nodeTxt = domFuncsMap[nodeTxt]
 	return nodeTxt
 
 def TryMangleNode (node) -> str:
@@ -266,8 +292,6 @@ for arg in sys.argv:
 
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
-currentFuncName = '.'
-currentFunc = 1
 WalkTreePass1 (tree.root_node)
 # for funcName in varsCnts:
 # 	funcVarsCnts = varsCnts[funcName]
@@ -289,9 +313,9 @@ WalkTreePass2 (tree.root_node)
 # a+= body+'}'
 # '''
 if debug:
-	output = DOM_AND_CSS_REMAP_CODE + output
+	output = DOM_FUNCS_AND_CSS_MAP_CODE + output
 else:
-	output = DOM_AND_CSS_REMAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+	output = DOM_FUNCS_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
