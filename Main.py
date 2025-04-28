@@ -15,23 +15,31 @@ ARGS_INDCTRS.append(11)
 IDXS_INDCTRS = [12]
 for i in range(14, 17):
 	IDXS_INDCTRS.append(i)
+PRINT_DOM_MAP_CODE = '''for (o of [Element, Node, Array, String, Window, Document, XMLHttpRequest, EventTarget])
+{
+	p = o.prototype
+	console.log(o)
+	for (n of Object.getOwnPropertyNames(p))
+	{
+		try
+		{
+			console.log(p[n].name, n)
+		}
+		catch(e)
+		{
+		}
+	}
+}'''
 DOM_AND_CSS_MAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest,EventTarget]){p=o.prototype
-b={}
-console.log(o)
-for(n of Object.getOwnPropertyNames(p)){s=0
-e=n.length-1
-a=n[s]
-while(a in b){s++
-a=n[s]+n[e]
-e--}try{p[a]=p[n]
-b[a]=1}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+for(n of Object.getOwnPropertyNames(p)){try{p[n[0]]=p[n]
+p[n[n.length-1]]=p[n]
+p[n[Math.ceil(n.length/2)]]=p[n]
+p[n[Math.ceil(n.length*.6)]+n[Math.ceil(n.length/4)]]=p[n]
+p[n[Math.ceil(n.length/3)]+n[Math.ceil(n.length*.8)]]=p[n]
+p[n[0]+n[Math.ceil(n.length/2)]+n[n.length-2]]=p[n]}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
-_memberRemap = open(os.path.join(_thisDir, 'DomMap'), 'r').read()
-DOM_MAP = {}
-for line in _memberRemap.split('\n'):
-	parts = line.split()
-	DOM_MAP[parts[0]] = parts[1]
+domList = open(os.path.join(_thisDir, 'DomList'), 'r').read()
 VAR_REPLACE_CHAR_VAL = 17
 WINDOW_REPLACE_CHAR_VAL = 18
 ARGS_AND_IDXS_CONDENSE_CODE = '''d=''
@@ -49,7 +57,7 @@ p++}}d+=g}else d+=c}}'''
 # FUNC_REPLACE_CHAR_VAL = 19
 OKAY_NAME_CHARS = list(string.ascii_letters)
 DONT_MANGLE_SUB_MEMBERS = ['Math', 'JSON', 'console']
-DONT_MANGLE = DONT_MANGLE_SUB_MEMBERS + ['window', 'document', 'String', 'parseInt', 'parseFloat', 'cssText', 'charCodeAt', 'if', 'do', 'of', 'in']
+DONT_MANGLE = DONT_MANGLE_SUB_MEMBERS + ['window', 'document', 'String', 'cancel', 'requestAnimationFrame', 'parseInt', 'parseFloat', 'cssText', 'charCodeAt', 'Infinity', 'if', 'do', 'of', 'in']
 WHITESPACE_EQUIVALENT = string.whitespace + ';'
 txt = ''
 output = ''
@@ -61,17 +69,19 @@ currentFuncVarsNames = []
 unusedNames = {}
 unusedNames[currentFuncName] = []
 unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
-mangledMembers = {}
-mangledMembers[currentFuncName] = {}
+mangledNames = {}
+mangledNames[currentFuncName] = {}
 usedNames = {}
 usedNames[currentFuncName] = ['_', '$', 'CA']
 skipNodesAtPositions = []
 # varsCnts = {}
 # userClassFuncsCnts = {}
 # maxLocalVarsCnt = 0
+domMap = {}
 userClassFuncs = []
 compress = True
 debug = False
+usedDomNames = []
 
 def WalkTreePass1 (node):
 	global currentFunc
@@ -104,19 +114,20 @@ def WalkTreePass1 (node):
 # 	else:
 # 		varsCnts[currentFuncName][varName] = 1
 
-def GetDomFuncMap (funcName : str):
+def GetDomMap (name : str):
 	output = []
-	if len(funcName) > 3:
-		output.append(funcName[3] + funcName[math.ceil(len(funcName) / 2)])
-	if len(funcName) > 3:
-		output.append(funcName[3] + funcName[-2])
-	if len(funcName) > math.ceil(len(funcName) * .9):
-		output.append(funcName[2] + funcName[math.ceil(len(funcName) * .9)])
-	output.append(funcName[len(funcName) - 3] + funcName[1])
+	output.append(name[0])
+	output.append(name[-1])
+	output.append(name[math.ceil(len(name) / 2)])
+	if len(name) > math.ceil(len(name) * .6):
+		output.append(name[math.ceil(len(name) * .6)] + name[math.ceil(len(name) / 4)])
+		if len(name) > math.ceil(len(name) * .8):
+			output.append(name[math.ceil(len(name) / 3)] + name[math.ceil(len(name) * .8)])
+	output.append(name[0] + name[math.ceil(len(name) / 2)] + name[-2])
 	return output
 
 def WalkTreePass2 (node):
-	global output, currentFunc, usedNames, unusedNames, mangledMembers, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
+	global output, currentFunc, usedNames, unusedNames, mangledNames, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == ';':
 		AddToOutput (nodeTxt)
@@ -184,7 +195,7 @@ def WalkTreePass2 (node):
 					unusedNames[nodeTxt].remove(usedName)
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
-			mangledMembers[nodeTxt] = dict(mangledMembers[''])
+			mangledNames[nodeTxt] = dict(mangledNames[''])
 		if nextSibling and (isOfOrIn or node.type in ['new', 'case', 'class', 'delete', 'return', 'function'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
@@ -206,37 +217,39 @@ def TryMangleOrMapNode (node) -> str:
 	if node.type == 'identifier':
 		return TryMangleNode(node)
 	elif node.type == 'property_identifier':
-		if nodeTxt in DOM_MAP:
-			return DOM_MAP[nodeTxt]
 		siblingIdx = node.parent.children.index(node)
 		if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in DONT_MANGLE_SUB_MEMBERS:
-			if nodeTxt in userClassFuncs:
-				if node.parent.type in ['method_definition', 'member_expression']:
-					return TryMangleNode(node)
-				elif siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this':
-					return TryMangleNode(node)
+			if nodeTxt in userClassFuncs and (node.parent.type in ['method_definition', 'member_expression'] or (siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this')):
+				return TryMangleNode(node)
+			elif len(nodeTxt) > 2 and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
+				if nodeTxt not in usedDomNames:
+					usedDomNames.append(nodeTxt)
+				nodeTxt = domMap[nodeTxt]
 	return nodeTxt
 
 def TryMangleNode (node) -> str:
 	nodeTxt = node.text.decode('utf-8')
+	funcName = currentFuncName
+	siblingIdx = node.parent.children.index(node)
+	if (siblingIdx == 0 or node.parent.children[siblingIdx - 1].type not in ['const', 'var', 'let']) and (nodeTxt not in mangledNames[currentFuncName] or nodeTxt in mangledNames['']):
+		funcName = ''
 	if len(nodeTxt) == 1 or nodeTxt in DONT_MANGLE:
 		return nodeTxt
-	if nodeTxt not in mangledMembers[currentFuncName]:
-		usedNames_ = usedNames[currentFuncName]
+	if nodeTxt not in mangledNames[funcName]:
+		usedNames_ = usedNames[funcName]
 		unusedNameIdx = 0
-		if unusedNames[currentFuncName] != []:
-			unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
-		while not currentFunc or unusedNames[currentFuncName] == [] or nodeTxt in usedNames_:
+		if unusedNames[funcName] != []:
+			unusedNameIdx = random.randint(0, len(unusedNames[funcName]) - 1)
+		while not currentFunc or unusedNames[funcName] == [] or nodeTxt in usedNames_:
 			unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
 			if unusedName not in usedNames_ + DONT_MANGLE:
-				unusedNames[currentFuncName].append(unusedName)
-				unusedNameIdx = len(unusedNames[currentFuncName]) - 1
+				unusedNames[funcName].append(unusedName)
+				unusedNameIdx = len(unusedNames[funcName]) - 1
 				break
-		mangledMembers[currentFuncName][nodeTxt] = unusedNames[currentFuncName].pop(unusedNameIdx)
-		mangledMember = mangledMembers[currentFuncName][nodeTxt]
-		usedNames[currentFuncName].append(mangledMember)
-	print('YAY', nodeTxt, mangledMembers[currentFuncName][nodeTxt])
-	nodeTxt = mangledMembers[currentFuncName][nodeTxt]
+		mangledName = unusedNames[funcName].pop(unusedNameIdx)
+		mangledNames[funcName][nodeTxt] = mangledName
+		usedNames[funcName].append(mangledName)
+	nodeTxt = mangledNames[funcName][nodeTxt]
 	return nodeTxt
 
 def CondenseArgs (node, argsCntsIndctrsVals : list):
@@ -274,7 +287,7 @@ def Compress (filePath : str) -> str:
 	return open(filePath + '.gz', 'rb').read()
 
 # def GetTerserCommand (filePath : str):
-# 	return ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers', '-c', 'ecma=2025', '-c', 'keep_fargs=false', '-c', 'unsafe', '-c', 'unsafe_arrows', '-c', 'unsafe_comps', '-c', 'unsafe_Function', '-c', 'unsafe_math', '-c', 'unsafe_symbols', '-c', 'unsafe_methods', '-c', 'unsafe_proto', '-c', 'unsafe_regexp', '-c', 'unsafe_undefined', '-m', 'eval', '-m', 'toplevel', '--mangle-props', 'keep_quoted="strict"']
+# 	return ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel', '--mangle-props', 'builtins,keep_quoted="strict"']
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDCTR):
@@ -288,6 +301,16 @@ for arg in sys.argv:
 	elif arg == DEBUG_INDCTR:
 		debug = True
 
+domMapTxt = open(os.path.join(_thisDir, 'DomMap'), 'r').read()
+for line in domMapTxt.split('\n'):
+	clauses = line.split()
+	domName = clauses[0]
+	mapToIdx = int(clauses[1])
+	if len(domName) <= math.ceil(len(domName) * .6) and mapToIdx > 2:
+		mapToIdx -= 1
+	if len(domName) <= math.ceil(len(domName) * .8) and mapToIdx > 3:
+		mapToIdx -= 1
+	domMap[domName] = GetDomMap(domName)[mapToIdx]
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTreePass1 (tree.root_node)
@@ -317,3 +340,4 @@ else:
 open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
+print(usedDomNames)
