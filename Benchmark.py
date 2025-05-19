@@ -44,7 +44,7 @@ if compress:
 else:
 	sizeResults['roadroller'] = len(open(outputPath, 'r').read())
 time_ = time.perf_counter()
-js = subprocess.run(['terser', inputPath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel', '--mangle-props', 'builtins,keep_quoted="strict"'], capture_output = True).stdout
+js = subprocess.run(['terser', inputPath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel', '--mangle-props', 'keep_quoted="strict"'], capture_output = True).stdout
 timeResults['terser'] = time.perf_counter() - time_
 outputPath = outputPathPrefix + '_terser.js'
 open(outputPath, 'wb').write(js)

@@ -8,6 +8,7 @@ INPUT_INDCTR = '-i='
 OUTPUT_INDCTR = '-o='
 DONT_COMPRESS_INDCTR = '-n'
 DEBUG_INDCTR = '-d'
+DONT_MANGLE_INDCTR = '-r'
 ARGS_INDCTRS = []
 for i in range(1, 10):
 	ARGS_INDCTRS.append(i)
@@ -38,14 +39,13 @@ p[n[Math.ceil(n.length*.6)]+n[Math.ceil(n.length/4)]]=p[n]
 p[n[Math.ceil(n.length/3)]+n[Math.ceil(n.length*.8)]]=p[n]
 p[n[0]+n[Math.ceil(n.length/2)]+n[n.length-2]]=p[n]}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
-FUNC_REPLACE_CODE = '''a=`function ${n}(`
+FUNC_REPLACE_CODE = '''f=`function ${n}(`
 for(b=97;b<105;b++)a+=String.fromCharCode(b)+','
-a+='){var '
+f+='){var '
 for(b=105;b<123;b++)b+=String.fromCharCode(b)+'=0,'
-a+=';'
+f+=';'
 for(b=65;b<90;b++){c=String.fromCharCode(b)
-a+=`var ${c}=window.${c}${c};`}
-a+= body+`}`'''
+f+=`var ${c}=window.${c}${c};`}f+=`}`'''
 _thisDir = os.path.split(os.path.abspath(__file__))[0]
 domList = open(os.path.join(_thisDir, 'DomList'), 'r').read()
 VAR_REPLACE_CHAR_VAL = 17
@@ -75,9 +75,8 @@ currentFuncName = ''
 currentFunc = None
 currentFuncTxt = ''
 currentFuncVarsNames = []
-unusedNames = {}
-unusedNames[currentFuncName] = []
-unusedNames[currentFuncName].extend(OKAY_NAME_CHARS)
+lastLocalVarNameIdx = 0
+lastGlobalVarNameIdx = 0
 mangledNames = {}
 mangledNames[currentFuncName] = {}
 usedNames = {}
@@ -90,6 +89,7 @@ domMap = {}
 userClassFuncs = []
 compress = True
 debug = False
+dontMangleNames = []
 usedDomNames = []
 
 def WalkTreePass1 (node):
@@ -116,7 +116,7 @@ def WalkTreePass1 (node):
 # 		varsCnts[currentFuncName][varName] = 1
 
 def WalkTreePass2 (node):
-	global output, currentFunc, usedNames, unusedNames, mangledNames, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
+	global output, currentFunc, usedNames, mangledNames, currentFuncTxt, currentFuncName, currentFuncVarsNames, skipNodesAtPositions
 	nodeTxt = node.text.decode('utf-8')
 	if node.type == ';':
 		AddToOutput (nodeTxt)
@@ -157,7 +157,7 @@ def WalkTreePass2 (node):
 		# 		CondenseArgs (node, ARGS_INDCTRS)
 		# 	elif node.type == '[' and nextSibling.type != 'array':
 		# 		CondenseArgs (node, IDXS_INDCTRS)
-		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1) and node.type != 'function':
+		if node.end_byte not in skipNodesAtPositions and not (nodeTxt.endswith(';') and node.end_byte == len(txt) - 1) and (node.type != 'function' or debug):
 			if inVarDeclrn:
 				nodeTxt = 'var '
 			AddToOutput (nodeTxt)
@@ -172,20 +172,18 @@ def WalkTreePass2 (node):
 			currentFuncName = ''
 			currentFunc = None
 			currentFuncVarsNames = []
-			AddToOutput (chr(FUNC_START_CHAR_VAL) + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :] + chr(FUNC_END_CHAR_VAL))
+			if debug:
+				AddToOutput (currentFuncTxt[: funcBodyStartIdx] + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx :])
+			else:
+				AddToOutput (chr(FUNC_START_CHAR_VAL) + funcBodyPrefix + currentFuncTxt[funcBodyStartIdx : -1] + chr(FUNC_END_CHAR_VAL))
 			currentFuncTxt = ''
 		elif (node.type == 'identifier' and node.parent.type == 'function_declaration') or (node.type == 'property_identifier' and node.parent.type == 'method_definition'):
 			currentFuncName = nodeTxt
 			currentFunc = node.parent
-			unusedNames[nodeTxt] = []
-			unusedNames[nodeTxt].extend(OKAY_NAME_CHARS)
-			for usedName in usedNames['']:
-				if usedName in unusedNames[nodeTxt]:
-					unusedNames[nodeTxt].remove(usedName)
 			usedNames[nodeTxt] = []
 			usedNames[nodeTxt].extend(usedNames[''])
 			mangledNames[nodeTxt] = dict(mangledNames[''])
-		if nextSibling and (isOfOrIn or node.type in ['new', 'case', 'class', 'delete', 'return'] or (node.type == 'else' and nextSibling.type in ['if_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
+		if nextSibling and (isOfOrIn or node.type in ['new', 'case', 'class', 'delete', 'return'] or (node.type == 'function' and debug) or (node.type == 'else' and nextSibling.type in ['if_statement', 'for_statement', 'lexical_declaration', 'variable_declaration', 'expression_statement'])) and nextSibling.type not in ['{', 'array']:
 			AddToOutput (' ')
 	for child in node.children:
 		WalkTreePass2 (child)
@@ -213,35 +211,57 @@ def TryMangleOrMapNode (node) -> str:
 			elif len(nodeTxt) > 2 and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
 				if nodeTxt not in usedDomNames:
 					usedDomNames.append(nodeTxt)
-				nodeTxt = domMap[nodeTxt]
+				# if nodeTxt in domMap:
+				# 	nodeTxt = domMap[nodeTxt]
 	return nodeTxt
 
 def TryMangleNode (node) -> str:
+	global lastLocalVarNameIdx, lastGlobalVarNameIdx
 	nodeTxt = node.text.decode('utf-8')
-	if len(nodeTxt) == 1 or nodeTxt in DONT_MANGLE:
+	if nodeTxt in dontMangleNames:
 		return nodeTxt
-	usedNames_ = usedNames[currentFuncName] + usedNames['']
-	siblingIdx = node.parent.children.index(node)
-	inVarDeclrn = siblingIdx > 0 and node.parent.children[siblingIdx - 1].type in ['const', 'var', 'let']
-	if nodeTxt not in usedNames_ or inVarDeclrn:
-		unusedNameIdx = 0
-		if currentFunc and (unusedNames[currentFuncName] != [] or inVarDeclrn):
-			unusedNameIdx = random.randint(0, len(unusedNames[currentFuncName]) - 1)
-		else:
-			while unusedNames[currentFuncName] == [] or nodeTxt not in usedNames_ or inVarDeclrn:
-				unusedName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
-				if unusedName not in DONT_MANGLE + usedNames_:
-					unusedNames[currentFuncName].append(unusedName)
-					unusedNameIdx = len(unusedNames[currentFuncName]) - 1
-					break
-		mangledName = unusedNames[currentFuncName].pop(unusedNameIdx)
-		mangledNames[currentFuncName][nodeTxt] = mangledName
-		usedNames[currentFuncName].append(mangledName)
-		if currentFuncName != '':
-			mangledNames[''][nodeTxt] = mangledName
-			usedNames[''].append(mangledName)
-	nodeTxt = mangledNames[currentFuncName][nodeTxt]
-	return nodeTxt
+	mangledName = ''
+	if nodeTxt in mangledNames[currentFuncName]:
+		mangledName = mangledNames[currentFuncName][nodeTxt]
+	if currentFunc:
+		lastLocalVarNameIdx += 1
+		if lastLocalVarNameIdx < len(OKAY_NAME_CHARS):
+			mangledName = OKAY_NAME_CHARS[lastLocalVarNameIdx]
+	else:
+		lastGlobalVarNameIdx += 1
+		if lastGlobalVarNameIdx < len(string.ascii_uppercase):
+			mangledName = string.ascii_uppercase[lastGlobalVarNameIdx] * 2
+	if mangledName == '':
+		while True:
+			mangledName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+			if mangledName not in DONT_MANGLE + list(mangledNames[currentFuncName]):
+				break
+	mangledNames[currentFuncName][nodeTxt] = mangledName
+	return mangledName
+	# if len(nodeTxt) == 1 or nodeTxt in DONT_MANGLE:
+	# 	return nodeTxt
+	# siblingIdx = node.parent.children.index(node)
+	# inVarDeclrn = siblingIdx > 0 and node.parent.children[siblingIdx - 1].type in ['const', 'var', 'let']
+	# if nodeTxt not in mangledNames[currentFuncName] or inVarDeclrn:
+	# 	mangledName = ''
+	# 	if currentFunc or inVarDeclrn:
+	# 		if currentFunc:
+	# 			if lastLocalVarNameIdx < len(OKAY_NAME_CHARS):
+	# 				mangledName = OKAY_NAME_CHARS[lastLocalVarNameIdx]
+	# 				lastLocalVarNameIdx += 1
+	# 		elif lastGlobalVarNameIdx < len(OKAY_NAME_CHARS):
+	# 			mangledName = string.ascii_uppercase[lastGlobalVarNameIdx] * 2
+	# 			lastGlobalVarNameIdx += 1
+	# 	if mangledName == '':
+	# 		while True:
+	# 			mangledName = random.choice(OKAY_NAME_CHARS) + random.choice(OKAY_NAME_CHARS)
+	# 			if mangledName not in DONT_MANGLE + list(mangledNames[currentFuncName]):
+	# 				break
+	# 	mangledNames[currentFuncName][nodeTxt] = mangledName
+	# 	usedNames[currentFuncName].append(mangledName)
+	# elif nodeTxt in mangledNames['']:
+	# 	return mangledNames[''][nodeTxt]
+	# return mangledNames[currentFuncName][nodeTxt]
 
 def CondenseArgs (node, argsCntsIndctrsVals : list):
 	global skipNodesAtPositions
@@ -289,8 +309,10 @@ def Compress (filePath : str) -> str:
 	subprocess.check_call(cmd)
 	return open(filePath + '.gz', 'rb').read()
 
-# def GetTerserCommand (filePath : str):
-# 	return ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel', '--mangle-props', 'builtins,keep_quoted="strict"']
+def RunTerser (filePath : str):
+	cmd = ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel,reserved=[' + ','.join(dontMangleNames) + ']', '--mangle-props', 'keep_quoted="strict"']
+	print(' '.join(cmd))
+	subprocess.check_call(cmd)
 
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDCTR):
@@ -303,6 +325,8 @@ for arg in sys.argv:
 		compress = False
 	elif arg == DEBUG_INDCTR:
 		debug = True
+	elif arg.startswith(DONT_MANGLE_INDCTR):
+		dontMangleNames = arg[arg.find('="') + 2 : -1].split(',')
 
 domMapTxt = open(os.path.join(_thisDir, 'DomMap'), 'r').read()
 for line in domMapTxt.split('\n'):
@@ -314,22 +338,26 @@ for line in domMapTxt.split('\n'):
 	if len(domName) <= math.ceil(len(domName) * .8) and mapToIdx > 3:
 		mapToIdx -= 1
 	domMap[domName] = GetDomMap(domName)[mapToIdx]
+open(outputPath, 'w').write(txt)
+print(txt)
+RunTerser (outputPath)
+txt = open(outputPath, 'r').read()
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
 WalkTreePass1 (tree.root_node)
-# for funcName in varsCnts:
-# 	funcVarsCnts = varsCnts[funcName]
-# 	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
-# 	if funcName != '':
-# 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
-# 	varsCnts[funcName] = funcVarsCnts
-WalkTreePass2 (tree.root_node)
-if debug:
-	output = DOM_AND_CSS_MAP_CODE + output
-else:
-	# output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
-	output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + FUNC_REPLACE_CODE + '\neval(a)'
-open(outputPath, 'w').write(output)
+# # for funcName in varsCnts:
+# # 	funcVarsCnts = varsCnts[funcName]
+# # 	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
+# # 	if funcName != '':
+# # 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
+# # 	varsCnts[funcName] = funcVarsCnts
+# WalkTreePass2 (tree.root_node)
+# if debug:
+# 	output = DOM_AND_CSS_MAP_CODE + output
+# else:
+# 	# output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+# 	output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + FUNC_REPLACE_CODE + '\neval(a)'
+# open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
 print(usedDomNames)
