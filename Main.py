@@ -326,7 +326,7 @@ for arg in sys.argv:
 	elif arg == DEBUG_INDCTR:
 		debug = True
 	elif arg.startswith(DONT_MANGLE_INDCTR):
-		dontMangleNames = arg[arg.find('="') + 2 : -1].split(',')
+		dontMangleNames = arg[arg.find('[') + 1 : -1].split(',')
 
 domMapTxt = open(os.path.join(_thisDir, 'DomMap'), 'r').read()
 for line in domMapTxt.split('\n'):
@@ -339,7 +339,6 @@ for line in domMapTxt.split('\n'):
 		mapToIdx -= 1
 	domMap[domName] = GetDomMap(domName)[mapToIdx]
 open(outputPath, 'w').write(txt)
-print(txt)
 RunTerser (outputPath)
 txt = open(outputPath, 'r').read()
 jsBytes = txt.encode('utf-8')
@@ -355,7 +354,7 @@ WalkTreePass1 (tree.root_node)
 # if debug:
 # 	output = DOM_AND_CSS_MAP_CODE + output
 # else:
-# 	# output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+# # 	# output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
 # 	output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + FUNC_REPLACE_CODE + '\neval(a)'
 # open(outputPath, 'w').write(output)
 if compress:
