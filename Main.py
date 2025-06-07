@@ -314,6 +314,11 @@ def RunTerser (filePath : str):
 	print(' '.join(cmd))
 	subprocess.check_call(cmd)
 
+def RunRoadroller (filePath : str):
+	cmd = ['npx', 'roadroller', filePath, '-o', filePath]
+	print(' '.join(cmd))
+	subprocess.check_call(cmd)
+
 for arg in sys.argv:
 	if arg.startswith(TEXT_INDCTR):
 		txt += arg[len(TEXT_INDCTR) :]
@@ -339,7 +344,7 @@ for line in domMapTxt.split('\n'):
 		mapToIdx -= 1
 	domMap[domName] = GetDomMap(domName)[mapToIdx]
 open(outputPath, 'w').write(txt)
-RunTerser (outputPath)
+RunRoadroller (outputPath)
 txt = open(outputPath, 'r').read()
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
