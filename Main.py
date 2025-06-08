@@ -31,13 +31,7 @@ PRINT_DOM_MAP_CODE = '''for (o of [Element, Node, Array, String, Window, Documen
 		}
 	}
 }'''
-DOM_AND_CSS_MAP_CODE = '''for(o of[Element,Node,Array,String,Window,Document,XMLHttpRequest,EventTarget]){p=o.prototype
-for(n of Object.getOwnPropertyNames(p)){try{p[n[0]]=p[n]
-p[n[n.length-1]]=p[n]
-p[n[Math.ceil(n.length/2)]]=p[n]
-p[n[Math.ceil(n.length*.6)]+n[Math.ceil(n.length/4)]]=p[n]
-p[n[Math.ceil(n.length/3)]+n[Math.ceil(n.length*.8)]]=p[n]
-p[n[0]+n[Math.ceil(n.length/2)]+n[n.length-2]]=p[n]}catch(e){}}}for(n in document.body.style){f=eval(function(a){this.style[`_{n}`]=a})
+CSS_MAP_CODE = '''for(n in document.body.style){f=eval(function(a){this.style[`{n}`]=a})
 Element.prototype['_'+n[0]+n[n.length-1]]=f}'''
 FUNC_REPLACE_CODE = '''f=`function ${n}(`
 for(b=97;b<105;b++)a+=String.fromCharCode(b)+','
@@ -46,8 +40,6 @@ for(b=105;b<123;b++)b+=String.fromCharCode(b)+'=0,'
 f+=';'
 for(b=65;b<90;b++){c=String.fromCharCode(b)
 f+=`var ${c}=window.${c}${c};`}f+=`}`'''
-_thisDir = os.path.split(os.path.abspath(__file__))[0]
-domList = open(os.path.join(_thisDir, 'DomList'), 'r').read()
 VAR_REPLACE_CHAR_VAL = 17
 WINDOW_REPLACE_CHAR_VAL = 18
 ARGS_AND_IDXS_CONDENSE_CODE = '''d=''
@@ -85,7 +77,6 @@ skipNodesAtPositions = []
 # varsCnts = {}
 # userClassFuncsCnts = {}
 # maxLocalVarsCnt = 0
-domMap = {}
 userClassFuncs = []
 compress = True
 debug = False
@@ -101,8 +92,8 @@ def WalkTreePass1 (node):
 	# 	AddToVarCount (node.children[0])
 	# elif isIdentifier:
 	# 	AddToVarCount (node)
-	if node.type == 'property_identifier' and node.parent.type == 'method_definition' and node.parent.parent.type == 'class_body':
-		userClassFuncs.append(nodeTxt)
+	# if node.type == 'property_identifier' and node.parent.type == 'method_definition' and node.parent.parent.type == 'class_body':
+	# 	userClassFuncs.append(nodeTxt)
 	for child in node.children:
 		WalkTreePass1 (child)
 
@@ -129,18 +120,18 @@ def WalkTreePass2 (node):
 			nextSibling = siblings[siblingIdx + 1]
 	if node.children == []:
 		nodeTxt = TryMangleOrMapNode(node)
-		# if nodeTxt == 'style':
-		# 	parent2 = node.parent.parent
-		# 	parentIdx = parent2.children.index(node.parent)
-		# 	if len(parent2.children) > parentIdx + 1:
-		# 		node2 = parent2.children[parentIdx + 1]
-		# 		if node2.text == b'.':
-		# 			node3 = parent2.children[parentIdx + 2]
-		# 			node3Txt = node3.text.decode('utf-8')
-		# 			skipNodesAtPositions.append(node.end_byte)
-		# 			skipNodesAtPositions.append(node2.end_byte)
-		# 			skipNodesAtPositions.append(node3.end_byte)
-		# 			AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
+		if nodeTxt == 'style':
+			parent2 = node.parent.parent
+			parentIdx = parent2.children.index(node.parent)
+			if len(parent2.children) > parentIdx + 1:
+				node2 = parent2.children[parentIdx + 1]
+				if node2.text == b'.':
+					node3 = parent2.children[parentIdx + 2]
+					node3Txt = node3.text.decode('utf-8')
+					skipNodesAtPositions.append(node.end_byte)
+					skipNodesAtPositions.append(node2.end_byte)
+					skipNodesAtPositions.append(node3.end_byte)
+					AddToOutput ('_' + node3Txt[0] + node3Txt[-1])
 		isOfOrIn = node.type in ['of', 'in']
 		inVarDeclrn = node.type in ['let', 'var', 'const']
 		if isOfOrIn:
@@ -208,14 +199,10 @@ def TryMangleOrMapNode (node) -> str:
 		if node.parent.children[siblingIdx - 2].text.decode('utf-8') not in DONT_MANGLE_SUB_MEMBERS:
 			if nodeTxt in userClassFuncs and (node.parent.type in ['method_definition', 'member_expression'] or (siblingIdx > 1 and node.parent.children[siblingIdx - 2].type == 'this')):
 				return TryMangleNode(node)
-			elif len(nodeTxt) > 2 and ((siblingIdx < len(node.parent.children) - 1 and node.parent.children[siblingIdx + 1] == '()') or node.parent.parent.type == 'call_expression'):
-				if nodeTxt not in usedDomNames:
-					usedDomNames.append(nodeTxt)
-				# if nodeTxt in domMap:
-				# 	nodeTxt = domMap[nodeTxt]
 	return nodeTxt
 
 def TryMangleNode (node) -> str:
+	# return node.text.decode('utf-8')
 	global lastLocalVarNameIdx, lastGlobalVarNameIdx
 	nodeTxt = node.text.decode('utf-8')
 	if nodeTxt in dontMangleNames:
@@ -292,18 +279,6 @@ def AtEndOfHierarchy (root, node) -> bool:
 			return True
 	return False
 
-def GetDomMap (name : str):
-	output = []
-	output.append(name[0])
-	output.append(name[-1])
-	output.append(name[math.ceil(len(name) / 2)])
-	if len(name) > math.ceil(len(name) * .6):
-		output.append(name[math.ceil(len(name) * .6)] + name[math.ceil(len(name) / 4)])
-		if len(name) > math.ceil(len(name) * .8):
-			output.append(name[math.ceil(len(name) / 3)] + name[math.ceil(len(name) * .8)])
-	output.append(name[0] + name[math.ceil(len(name) / 2)] + name[-2])
-	return output
-
 def Compress (filePath : str) -> str:
 	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', filePath]
 	subprocess.check_call(cmd)
@@ -333,34 +308,29 @@ for arg in sys.argv:
 	elif arg.startswith(DONT_MANGLE_INDCTR):
 		dontMangleNames = arg[arg.find('[') + 1 : -1].split(',')
 
-domMapTxt = open(os.path.join(_thisDir, 'DomMap'), 'r').read()
-for line in domMapTxt.split('\n'):
-	clauses = line.split()
-	domName = clauses[0]
-	mapToIdx = int(clauses[1])
-	if len(domName) <= math.ceil(len(domName) * .6) and mapToIdx > 2:
-		mapToIdx -= 1
-	if len(domName) <= math.ceil(len(domName) * .8) and mapToIdx > 3:
-		mapToIdx -= 1
-	domMap[domName] = GetDomMap(domName)[mapToIdx]
 open(outputPath, 'w').write(txt)
-RunRoadroller (outputPath)
 txt = open(outputPath, 'r').read()
 jsBytes = txt.encode('utf-8')
 tree = PARSER.parse(jsBytes, encoding = 'utf8')
-WalkTreePass1 (tree.root_node)
-# # for funcName in varsCnts:
-# # 	funcVarsCnts = varsCnts[funcName]
-# # 	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
-# # 	if funcName != '':
-# # 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
-# # 	varsCnts[funcName] = funcVarsCnts
+# WalkTreePass1 (tree.root_node)
+RunTerser (outputPath)
+# RunRoadroller (outputPath)
+# txt = open(outputPath, 'r').read()
+# jsBytes = txt.encode('utf-8')
+# tree = PARSER.parse(jsBytes, encoding = 'utf8')
+# # WalkTreePass1 (tree.root_node)
+# # # for funcName in varsCnts:
+# # # 	funcVarsCnts = varsCnts[funcName]
+# # # 	funcVarsCnts = dict(sorted(funcVarsCnts.items(), key = lambda x : x[1]))
+# # # 	if funcName != '':
+# # # 		maxLocalVarsCnt = max(maxLocalVarsCnt, list(funcVarsCnts.values())[-1])
+# # # 	varsCnts[funcName] = funcVarsCnts
 # WalkTreePass2 (tree.root_node)
 # if debug:
-# 	output = DOM_AND_CSS_MAP_CODE + output
+# 	output = CSS_MAP_CODE + output
 # else:
-# # 	# output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
-# 	output = DOM_AND_CSS_MAP_CODE + 'a=`' + output + '`\n' + FUNC_REPLACE_CODE + '\neval(a)'
+# # 	# output = CSS_MAP_CODE + 'a=`' + output + '`\n' + ARGS_AND_IDXS_CONDENSE_CODE + '\neval(d)'
+# 	output = CSS_MAP_CODE + 'a=`' + output + '`\n' + FUNC_REPLACE_CODE + '\neval(a)'
 # open(outputPath, 'w').write(output)
 if compress:
 	Compress (outputPath)
