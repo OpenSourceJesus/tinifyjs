@@ -280,16 +280,19 @@ def AtEndOfHierarchy (root, node) -> bool:
 	return False
 
 def Compress (filePath : str) -> str:
-	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', filePath]
+	cmd = ['gzip', '--keep', '--force', '--verbose', '--best', '"' + filePath + '"']
+	print(' '.join(cmd))
 	subprocess.check_call(cmd)
 	return open(filePath + '.gz', 'rb').read()
 
 def RunTerser (filePath : str):
+	filePath = '"' + filePath + '"'
 	cmd = ['terser', filePath, '-o', filePath, '-c', 'booleans_as_integers,ecma=2025,keep_fargs=false,unsafe,unsafe_arrows,unsafe_comps,unsafe_Function,unsafe_math,unsafe_symbols,unsafe_methods,unsafe_proto,unsafe_regexp,unsafe_undefined', '-m', 'eval,toplevel,reserved=[' + ','.join(dontMangleNames) + ']', '--mangle-props', 'keep_quoted="strict"']
 	print(' '.join(cmd))
 	subprocess.check_call(cmd)
 
 def RunRoadroller (filePath : str):
+	filePath = '"' + filePath + '"'
 	cmd = ['npx', 'roadroller', filePath, '-o', filePath]
 	print(' '.join(cmd))
 	subprocess.check_call(cmd)
