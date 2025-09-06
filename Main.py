@@ -6,9 +6,9 @@ PARSER = Parser(JS_LANG)
 TEXT_INDCTR = '-t='
 INPUT_INDCTR = '-i='
 OUTPUT_INDCTR = '-o='
-DONT_COMPRESS_INDCTR = '-n'
+DONT_COMPRESS_INDCTR = '-no_compress'
 DEBUG_INDCTR = '-d'
-DONT_MANGLE_INDCTR = '-r'
+DONT_MANGLE_INDCTR = '-dont_mangle'
 ARGS_INDCTRS = []
 for i in range(1, 10):
 	ARGS_INDCTRS.append(i)
