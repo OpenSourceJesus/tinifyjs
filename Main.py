@@ -8,7 +8,7 @@ INPUT_INDCTR = '-i='
 OUTPUT_INDCTR = '-o='
 DONT_COMPRESS_INDCTR = '-no_compress'
 DEBUG_INDCTR = '-d'
-DONT_MANGLE_INDCTR = '-dont_mangle'
+DONT_MANGLE_INDCTR = '-no_mangle=['
 ARGS_INDCTRS = []
 for i in range(1, 10):
 	ARGS_INDCTRS.append(i)
@@ -309,7 +309,7 @@ for arg in sys.argv:
 	elif arg == DEBUG_INDCTR:
 		debug = True
 	elif arg.startswith(DONT_MANGLE_INDCTR):
-		dontMangleNames = arg[arg.find('[') + 1 : -1].split(',')
+		dontMangleNames = arg[len(DONT_COMPRESS_INDCTR) + 1 : -1].split(',')
 
 open(outputPath, 'w').write(txt)
 txt = open(outputPath, 'r').read()
